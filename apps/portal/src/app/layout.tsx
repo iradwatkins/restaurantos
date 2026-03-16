@@ -1,13 +1,27 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Manrope, Fraunces, JetBrains_Mono } from 'next/font/google';
 import { headers } from 'next/headers';
 import { Toaster } from 'sonner';
 import { ConvexClientProvider } from '@/components/convex-client-provider';
+import { ThemeProvider } from '@/components/theme-provider';
 import { resolveTenant, extractSubdomain } from '@/lib/tenant';
 import { generateThemeCSS } from '@/lib/theme';
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin'] });
+const sansFont = Manrope({
+  subsets: ['latin'],
+  variable: '--font-sans',
+});
+
+const displayFont = Fraunces({
+  subsets: ['latin'],
+  variable: '--font-display',
+});
+
+const monoFont = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
+});
 
 export const metadata: Metadata = {
   title: 'RestaurantOS',
@@ -33,13 +47,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>{themeCSS && <style dangerouslySetInnerHTML={{ __html: themeCSS }} />}</head>
-      <body className={inter.className}>
-        <ConvexClientProvider>
-          {children}
-          <Toaster position="top-right" richColors />
-        </ConvexClientProvider>
+      <body className={`${sansFont.variable} ${displayFont.variable} ${monoFont.variable} antialiased`}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem={false}
+          disableTransitionOnChange
+        >
+          <ConvexClientProvider>
+            {children}
+            <Toaster position="top-right" richColors />
+          </ConvexClientProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
