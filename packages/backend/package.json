@@ -1,0 +1,33 @@
+{
+  "name": "@restaurantos/backend",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./convex/_generated/api.js",
+  "types": "./convex/_generated/api.d.ts",
+  "exports": {
+    ".": {
+      "import": "./convex/_generated/api.js",
+      "types": "./convex/_generated/api.d.ts"
+    },
+    "./dataModel": {
+      "import": "./convex/_generated/dataModel.d.ts",
+      "types": "./convex/_generated/dataModel.d.ts"
+    }
+  },
+  "scripts": {
+    "dev": "convex dev",
+    "deploy": "convex deploy",
+    "codegen": "convex codegen"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "convex": "^1.28.0",
+    "jose": "^6.1.1",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.19.25",
+    "typescript": "^5.9.3"
+  }
+}
