@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
 import { Button } from '@restaurantos/ui';
 import { toast } from 'sonner';
 import { Eye, EyeOff, Loader2, UtensilsCrossed } from 'lucide-react';
@@ -46,56 +45,37 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-6 py-12 bg-gradient-to-br from-background via-background to-primary/5">
-      {/* Background decoration */}
+    <div className="flex min-h-screen items-center justify-center px-6 py-12 bg-background">
+      {/* Subtle background decoration */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <svg className="absolute -top-32 -right-32 w-96 h-96 text-primary/[0.03]" viewBox="0 0 200 200">
-          <circle cx="100" cy="100" r="80" fill="currentColor" />
-        </svg>
-        <svg className="absolute -bottom-48 -left-24 w-[500px] h-[500px] text-primary/[0.02]" viewBox="0 0 200 200">
-          <circle cx="100" cy="100" r="90" fill="currentColor" />
-        </svg>
+        <div className="absolute -top-[300px] -right-[200px] w-[600px] h-[600px] rounded-full bg-indigo-500/[0.03]" />
+        <div className="absolute -bottom-[400px] -left-[150px] w-[700px] h-[700px] rounded-full bg-violet-500/[0.02]" />
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="w-full max-w-sm relative z-10"
-      >
+      <div className="w-full max-w-sm relative z-10 animate-[fadeIn_0.4s_ease-out]">
         {/* Logo */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-          className="text-center mb-8"
-        >
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20 mb-4">
+        <div className="text-center mb-8">
+          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 mb-4">
             <UtensilsCrossed className="h-6 w-6" />
           </div>
-          <h1 className="text-2xl font-bold" data-display="true">Welcome back</h1>
-          <p className="text-muted-foreground mt-1">Sign in to your restaurant dashboard</p>
-        </motion.div>
+          <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--font-display)' }}>
+            Welcome back
+          </h1>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Sign in to your restaurant dashboard
+          </p>
+        </div>
 
         {/* Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.2 }}
-          className="rounded-2xl border border-border/60 bg-card shadow-xl shadow-black/[0.03] p-8"
-        >
+        <div className="rounded-2xl border border-border bg-card shadow-xl shadow-black/[0.04] p-8">
           {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-6 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
-            >
+            <div className="mb-6 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive animate-[fadeIn_0.2s_ease-out]">
               {error}
-            </motion.div>
+            </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label htmlFor="email" className="text-sm font-medium">Email address</label>
               <input
                 id="email"
@@ -103,11 +83,11 @@ export default function LoginPage() {
                 type="email"
                 required
                 autoComplete="email"
-                className="flex h-11 w-full rounded-lg border border-input bg-background px-4 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                className="flex h-11 w-full rounded-xl border border-border bg-background px-4 text-sm transition-all placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label htmlFor="password" className="text-sm font-medium">Password</label>
               <div className="relative">
                 <input
@@ -116,19 +96,19 @@ export default function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   required
                   autoComplete="current-password"
-                  className="flex h-11 w-full rounded-lg border border-input bg-background px-4 pr-11 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  className="flex h-11 w-full rounded-xl border border-border bg-background px-4 pr-11 text-sm transition-all placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-foreground transition-colors"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
 
-            <Button type="submit" className="w-full h-11 rounded-lg font-semibold" disabled={loading}>
+            <Button type="submit" className="w-full h-11 rounded-xl font-semibold" disabled={loading}>
               {loading ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in...</>
               ) : (
@@ -136,12 +116,19 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
-        </motion.div>
+        </div>
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
+        <p className="mt-6 text-center text-xs text-muted-foreground/50">
           Powered by RestaurantOS
         </p>
-      </motion.div>
+      </div>
+
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   );
 }
