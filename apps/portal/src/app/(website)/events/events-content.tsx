@@ -16,6 +16,14 @@ import { CalendarDays, Clock, Users, Utensils, Star } from 'lucide-react';
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const SHORT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+// Images for buffet pricing tiers
+const TIER_IMAGES: Record<string, string> = {
+  'Adults': 'https://images.unsplash.com/photo-1529543544282-ea57407bc2e3?w=600&h=400&fit=crop',
+  'Seniors': 'https://images.unsplash.com/photo-1447078806655-40579c2520d6?w=600&h=400&fit=crop',
+  'Kids 2-12': 'https://images.unsplash.com/photo-1484723091739-30a097e8f929?w=600&h=400&fit=crop',
+  'default': 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&h=400&fit=crop',
+};
+
 export default function EventsContent() {
   const { tenantId } = useTenant();
 
@@ -75,21 +83,32 @@ export default function EventsContent() {
                   <p className="text-muted-foreground mb-6">{event.description}</p>
                 )}
 
-                {/* Pricing Tiers */}
+                {/* Pricing Tiers with images */}
                 {event.pricingTiers && event.pricingTiers.length > 0 && (
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    {event.pricingTiers.map((tier: any) => (
-                      <div
-                        key={tier._id}
-                        className="rounded-xl border-2 border-primary/10 bg-primary/5 p-5 text-center hover:border-primary/30 transition-colors"
-                      >
-                        <Users className="h-6 w-6 mx-auto mb-2 text-primary" />
-                        <p className="font-semibold text-lg">{tier.tierName}</p>
-                        <p className="text-3xl font-bold text-primary mt-1">
-                          ${(tier.price / 100).toFixed(2)}
-                        </p>
-                      </div>
-                    ))}
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    {event.pricingTiers.map((tier: any) => {
+                      const tierImage = TIER_IMAGES[tier.tierName] || TIER_IMAGES['default'];
+                      return (
+                        <div
+                          key={tier._id}
+                          className="rounded-xl border-2 border-primary/10 overflow-hidden hover:border-primary/30 transition-colors bg-white"
+                        >
+                          <div className="h-40 overflow-hidden">
+                            <img
+                              src={tierImage}
+                              alt={tier.tierName}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="p-5 text-center">
+                            <p className="font-semibold text-lg">{tier.tierName}</p>
+                            <p className="text-3xl font-bold text-primary mt-1">
+                              ${(tier.price / 100).toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
