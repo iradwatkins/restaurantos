@@ -3,8 +3,8 @@
 import { useQuery } from 'convex/react';
 import { api } from '@restaurantos/backend';
 import { useTenant } from '@/hooks/use-tenant';
-import { Button, Badge, Card, CardContent } from '@restaurantos/ui';
-import { Clock, MapPin, Phone, ArrowRight, Star, CalendarDays, Truck, Users, ChevronRight } from 'lucide-react';
+import { Button, Badge } from '@restaurantos/ui';
+import { Clock, MapPin, Phone, ArrowRight, Star, CalendarDays, Truck, Users, ChevronRight, UtensilsCrossed } from 'lucide-react';
 import Link from 'next/link';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -29,329 +29,367 @@ export default function HomeContent() {
 
   if (!tenant) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="animate-pulse space-y-4 text-center">
-          <div className="h-8 w-48 bg-muted rounded mx-auto" />
-          <div className="h-4 w-64 bg-muted rounded mx-auto" />
-        </div>
+      <div className="min-h-[60vh] flex items-center justify-center bg-[#1a1a1a]">
+        <div className="animate-pulse text-white/40 text-lg">Loading...</div>
       </div>
     );
   }
 
   const today = new Date().getDay();
   const todayHours = tenant.businessHours?.find((h: any) => h.day === today);
-
-  // Collect food images from menu items for the gallery
   const allItems = menu?.flatMap((cat: any) => cat.items) ?? [];
   const itemsWithImages = allItems.filter((i: any) => i.imageUrl);
-  const galleryImages = [...new Set(itemsWithImages.map((i: any) => i.imageUrl) as string[])].slice(0, 8);
-
-  // Pick a hero background from food images
-  const heroImage = galleryImages[0] || null;
+  const featuredDishes = allItems.slice(0, 6);
 
   return (
-    <div className="bg-white">
+    <div>
 
-      {/* ═══════════════ HERO ═══════════════ */}
-      <section className="relative min-h-[520px] lg:min-h-[600px] flex items-center overflow-hidden">
-        {heroImage && (
-          <div
-            className="absolute inset-0 bg-cover bg-center scale-105"
-            style={{ backgroundImage: `url(${heroImage})` }}
-          />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#191A19]/90 via-[#191A19]/75 to-[#191A19]/50" />
-
-        <div className="relative w-full max-w-6xl mx-auto px-4 py-20">
-          <div className="max-w-xl">
-            {tenant.logoUrl && (
-              <img
-                src={tenant.logoUrl}
-                alt={tenant.name}
-                className="h-20 lg:h-24 mb-6 drop-shadow-lg"
-              />
-            )}
-
-            {tenant.tagline && (
-              <p className="text-lg lg:text-xl text-[#f9c80e] font-medium tracking-wide mb-4">
-                {tenant.tagline}
-              </p>
-            )}
-
-            <h1 className="text-3xl lg:text-5xl font-bold text-white leading-tight mb-6" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
-              Home Cooked Meals,<br />
-              <span className="text-[#f9c80e]">Made Fresh Daily</span>
-            </h1>
-
-            <p className="text-white/70 text-base lg:text-lg mb-8 max-w-md">
-              Soul Food, Salads, Wraps, Sweets & More.
-              {todayHours && !todayHours.isClosed && (
-                <span className="block mt-2 text-white/50 text-sm">
-                  Open today {todayHours.open} – {todayHours.close}
-                </span>
-              )}
-            </p>
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Link href="/order">
-                <button className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#348726] hover:bg-[#2d7520] text-white font-semibold text-base px-8 py-3.5 rounded-md transition-colors">
-                  Order Online
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              </Link>
-              <Link href="/our-menu">
-                <button className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white font-medium text-base px-8 py-3.5 rounded-md border border-white/20 transition-colors">
-                  View Full Menu
-                </button>
-              </Link>
+      {/* ════════════════════════════════════════════════
+          HERO — Full-screen food image with bold tagline
+          Inspired by His Place "Simply. Good. Food."
+          ════════════════════════════════════════════════ */}
+      <section className="relative min-h-[85vh] flex items-center overflow-hidden bg-[#1a1a1a]">
+        {/* Background food collage */}
+        <div className="absolute inset-0 grid grid-cols-3 opacity-30">
+          {itemsWithImages.slice(0, 3).map((item: any, idx: number) => (
+            <div key={idx} className="overflow-hidden">
+              <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
             </div>
+          ))}
+        </div>
+        <div className="absolute inset-0 bg-gradient-to-b from-[#1a1a1a]/60 via-[#1a1a1a]/80 to-[#1a1a1a]" />
+
+        <div className="relative w-full max-w-6xl mx-auto px-6 py-16 text-center">
+          {/* Logo */}
+          {tenant.logoUrl && (
+            <img src={tenant.logoUrl} alt={tenant.name} className="h-28 lg:h-36 mx-auto mb-8 drop-shadow-2xl" />
+          )}
+
+          {/* Tagline — big, bold, inspired by His Place "Simply. Good. Food." */}
+          <h1 className="text-5xl sm:text-6xl lg:text-8xl font-black text-white tracking-tight leading-none mb-4" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
+            Soul Food.
+          </h1>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-light text-[#f9c80e] tracking-wide mb-8" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
+            Made Fresh Daily.
+          </h2>
+
+          {tenant.tagline && (
+            <p className="text-white/60 text-lg max-w-lg mx-auto mb-10">
+              {tenant.tagline}
+            </p>
+          )}
+
+          {/* CTAs */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+            <Link href="/order">
+              <button className="w-full sm:w-auto bg-[#d32f2f] hover:bg-[#b71c1c] text-white font-bold text-lg px-10 py-4 rounded-full tracking-wide transition-colors shadow-lg shadow-red-900/30">
+                ORDER NOW
+              </button>
+            </Link>
+            <Link href="/our-menu">
+              <button className="w-full sm:w-auto bg-transparent hover:bg-white/10 text-white font-semibold text-lg px-10 py-4 rounded-full border-2 border-white/30 transition-colors">
+                VIEW MENU
+              </button>
+            </Link>
           </div>
+
+          {/* Quick info pills */}
+          <div className="flex items-center justify-center gap-4 flex-wrap text-white/50 text-sm">
+            {todayHours && !todayHours.isClosed && (
+              <span className="flex items-center gap-1.5 bg-white/5 px-4 py-2 rounded-full">
+                <Clock className="h-3.5 w-3.5" />
+                Open Today {todayHours.open} – {todayHours.close}
+              </span>
+            )}
+            {tenant.phone && (
+              <a href={`tel:${tenant.phone}`} className="flex items-center gap-1.5 bg-white/5 px-4 py-2 rounded-full hover:bg-white/10 transition-colors">
+                <Phone className="h-3.5 w-3.5" />
+                {tenant.phone}
+              </a>
+            )}
+            <span className="flex items-center gap-1.5 bg-white/5 px-4 py-2 rounded-full">
+              <Truck className="h-3.5 w-3.5" />
+              Delivery Available
+            </span>
+          </div>
+        </div>
+
+        {/* Scalloped divider at bottom — inspired by His Place */}
+        <div className="absolute bottom-0 left-0 right-0">
+          <svg viewBox="0 0 1200 40" className="w-full" preserveAspectRatio="none">
+            <path d="M0,40 C100,0 200,0 300,40 C400,0 500,0 600,40 C700,0 800,0 900,40 C1000,0 1100,0 1200,40 L1200,40 L0,40 Z" fill="white" />
+          </svg>
         </div>
       </section>
 
-      {/* ═══════════════ INFO BAR ═══════════════ */}
-      <section className="bg-[#191A19] text-white py-4 border-t border-white/10">
-        <div className="max-w-6xl mx-auto px-4 flex items-center justify-center gap-6 lg:gap-10 flex-wrap text-sm">
-          <span className="flex items-center gap-2">
-            <Truck className="h-4 w-4 text-[#348726]" />
-            <span className="font-medium">Pickup & Delivery</span>
+      {/* ════════════════════════════════════════════════
+          DELIVERY BAR — DoorDash / Uber Eats badges
+          From D&K flyer: "Yes We Deliver"
+          ════════════════════════════════════════════════ */}
+      <section className="bg-white py-5 border-b">
+        <div className="max-w-6xl mx-auto px-6 flex items-center justify-center gap-8 flex-wrap">
+          <span className="text-[#d32f2f] font-bold text-sm uppercase tracking-widest flex items-center gap-2">
+            <Truck className="h-4 w-4" />
+            Yes We Deliver
           </span>
-          <span className="text-white/50">|</span>
-          <span className="text-white/60">DoorDash</span>
-          <span className="text-white/60">Uber Eats</span>
+          <div className="flex items-center gap-4">
+            <span className="bg-[#FF3008] text-white text-xs font-bold px-3 py-1.5 rounded">DoorDash</span>
+            <span className="bg-[#06C167] text-white text-xs font-bold px-3 py-1.5 rounded">Uber Eats</span>
+          </div>
           {tenant.address && (
-            <>
-              <span className="text-white/50 hidden lg:inline">|</span>
-              <span className="flex items-center gap-1.5 text-white/60">
-                <MapPin className="h-3.5 w-3.5" />
-                {tenant.address.street}, {tenant.address.city}, {tenant.address.state} {tenant.address.zip}
-              </span>
-            </>
+            <span className="text-gray-500 text-sm flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5" />
+              {tenant.address.street}, {tenant.address.city}, {tenant.address.state} {tenant.address.zip}
+            </span>
           )}
         </div>
       </section>
 
-      {/* ═══════════════ TODAY'S SPECIAL ═══════════════ */}
-      {todaySpecial && (
-        <section className="py-12 bg-[#faf6ef]">
-          <div className="max-w-6xl mx-auto px-4">
-            <Link href="/events" className="block group">
-              <div className="bg-white rounded-xl shadow-sm border border-[#e8e0d0] p-6 md:p-8 hover:shadow-md transition-shadow">
-                <div className="flex items-start gap-4 mb-5">
-                  <div className="h-12 w-12 rounded-full bg-[#348726] flex items-center justify-center flex-shrink-0">
-                    <Star className="h-6 w-6 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-widest text-[#348726] mb-1">
-                      Today&apos;s Special — {DAYS[today]}
-                    </p>
-                    <h2 className="text-2xl font-bold text-[#191A19]" style={{ fontFamily: 'Georgia, serif' }}>
-                      {todaySpecial.name}
-                    </h2>
-                    {todaySpecial.description && (
-                      <p className="text-[#4D4D4D] mt-1">{todaySpecial.description}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {todaySpecial.items.map((item: any, idx: number) => (
-                    <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-[#faf6ef] border border-[#e8e0d0]">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-sm text-[#191A19] truncate">{item.name}</p>
-                        {item.description && (
-                          <p className="text-xs text-[#4D4D4D] truncate">{item.description}</p>
-                        )}
-                      </div>
-                      <span className="text-lg font-bold text-[#348726] ml-3 flex-shrink-0">
-                        ${(item.price / 100).toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                <p className="text-xs text-[#348726] font-medium mt-4 group-hover:underline flex items-center gap-1">
-                  View all specials <ChevronRight className="h-3 w-3" />
-                </p>
-              </div>
-            </Link>
-          </div>
-        </section>
-      )}
-
-      {/* ═══════════════ SUNDAY BUFFET / EVENT PROMO ═══════════════ */}
-      {publicEvents && publicEvents.length > 0 && (
-        <section className="py-12">
-          <div className="max-w-6xl mx-auto px-4">
-            <Link href="/events" className="block group">
-              <div className="relative rounded-xl overflow-hidden min-h-[320px] flex items-end">
-                {galleryImages[1] && (
-                  <div
-                    className="absolute inset-0 bg-cover bg-center group-hover:scale-105 transition-transform duration-700"
-                    style={{ backgroundImage: `url(${galleryImages[1]})` }}
-                  />
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-[#191A19] via-[#191A19]/60 to-transparent" />
-
-                <div className="relative w-full p-8 lg:p-10">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-[#f9c80e] mb-2">
-                    Every {publicEvents[0].dayOfWeek !== undefined ? DAYS[publicEvents[0].dayOfWeek] : 'Week'}
-                    {' · '}{publicEvents[0].startTime} – {publicEvents[0].endTime}
-                  </p>
-                  <h2 className="text-2xl lg:text-3xl font-bold text-white mb-3" style={{ fontFamily: 'Georgia, serif' }}>
-                    {publicEvents[0].name}
-                  </h2>
-
-                  {publicEvents[0].pricingTiers && (
-                    <div className="flex gap-4 lg:gap-6 flex-wrap mt-4">
-                      {publicEvents[0].pricingTiers.map((tier: any) => (
-                        <div key={tier._id} className="bg-white/10 backdrop-blur-sm rounded-lg px-5 py-3 text-center border border-white/15">
-                          <p className="text-white/70 text-xs font-medium">{tier.tierName}</p>
-                          <p className="text-xl font-bold text-white mt-0.5">${(tier.price / 100).toFixed(2)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Link>
-          </div>
-        </section>
-      )}
-
-      {/* ═══════════════ FOOD GALLERY ═══════════════ */}
-      {galleryImages.length > 0 && (
-        <section className="py-14 bg-[#191A19]">
-          <div className="max-w-6xl mx-auto px-4">
-            <div className="text-center mb-8">
-              <p className="text-xs font-semibold uppercase tracking-widest text-[#f9c80e] mb-2">
-                From Our Kitchen
-              </p>
-              <h2 className="text-2xl lg:text-3xl font-bold text-white" style={{ fontFamily: 'Georgia, serif' }}>
-                Soul Food Done Right
-              </h2>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {galleryImages.slice(0, 8).map((img, idx) => (
-                <div key={idx} className="aspect-square rounded-lg overflow-hidden">
-                  <img
-                    src={img}
-                    alt="Soul food dish"
-                    className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="text-center mt-8">
-              <Link href="/our-menu">
-                <button className="inline-flex items-center gap-2 bg-transparent hover:bg-white/10 text-white font-medium text-sm px-6 py-2.5 rounded-md border border-white/20 transition-colors">
-                  View Full Menu <ArrowRight className="h-4 w-4" />
-                </button>
-              </Link>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ═══════════════ ABOUT ═══════════════ */}
-      {tenant.aboutText && (
-        <section className="py-16">
-          <div className="max-w-3xl mx-auto px-4 text-center">
-            <p className="text-xs font-semibold uppercase tracking-widest text-[#348726] mb-3">
-              Our Story
-            </p>
-            <h2 className="text-2xl lg:text-3xl font-bold text-[#191A19] mb-6" style={{ fontFamily: 'Georgia, serif' }}>
-              {tenant.name}
+      {/* ════════════════════════════════════════════════
+          FEATURED DISHES — Large food photography grid
+          Inspired by His Place hero carousel + Soulé card layout
+          ════════════════════════════════════════════════ */}
+      <section className="py-16 bg-white">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="text-center mb-12">
+            <p className="text-[#d32f2f] font-bold text-sm uppercase tracking-widest mb-2">From Our Kitchen</p>
+            <h2 className="text-4xl lg:text-5xl font-bold text-[#1a1a1a]" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
+              Home Cooked Favorites
             </h2>
-            <p className="text-[#4D4D4D] leading-relaxed text-lg">
-              {tenant.aboutText}
-            </p>
           </div>
-        </section>
-      )}
 
-      {/* ═══════════════ HOURS & LOCATION ═══════════════ */}
-      {tenant.businessHours && tenant.businessHours.length > 0 && (
-        <section className="py-16 bg-[#faf6ef]">
-          <div className="max-w-6xl mx-auto px-4">
-            <div className="grid md:grid-cols-2 gap-10 items-start">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-[#348726] mb-3">
-                  Visit Us
-                </p>
-                <h2 className="text-2xl font-bold text-[#191A19] mb-6" style={{ fontFamily: 'Georgia, serif' }}>
-                  Hours & Location
-                </h2>
-                <div className="space-y-1 bg-white rounded-lg border border-[#e8e0d0] overflow-hidden">
-                  {tenant.businessHours.map((h: any) => (
-                    <div
-                      key={h.day}
-                      className={`flex justify-between text-sm px-4 py-2.5 ${
-                        h.day === today
-                          ? 'bg-[#348726] text-white font-semibold'
-                          : 'text-[#4D4D4D]'
-                      }`}
-                    >
-                      <span>{DAYS[h.day]}</span>
-                      <span>{h.isClosed ? 'Closed' : `${h.open} – ${h.close}`}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-6 space-y-2">
-                  {tenant.phone && (
-                    <a href={`tel:${tenant.phone}`} className="flex items-center gap-2 text-[#191A19] hover:text-[#348726] transition-colors font-medium">
-                      <Phone className="h-4 w-4" />
-                      {tenant.phone}
-                    </a>
-                  )}
-                  {tenant.address && (
-                    <p className="flex items-center gap-2 text-[#4D4D4D] text-sm">
-                      <MapPin className="h-4 w-4 flex-shrink-0" />
-                      {tenant.address.street}, {tenant.address.city}, {tenant.address.state} {tenant.address.zip}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Side image or map placeholder */}
-              <div className="rounded-xl overflow-hidden">
-                {galleryImages[2] ? (
-                  <img src={galleryImages[2]} alt={tenant.name} className="w-full h-72 object-cover" />
-                ) : (
-                  <div className="w-full h-72 bg-muted flex items-center justify-center text-muted-foreground">
-                    <MapPin className="h-8 w-8" />
-                  </div>
-                )}
-              </div>
-            </div>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            {featuredDishes.map((item: any, idx: number) => (
+              <FoodCard key={item._id || idx} item={item} large={idx === 0} />
+            ))}
           </div>
-        </section>
-      )}
 
-      {/* ═══════════════ ORDER CTA ═══════════════ */}
-      <section className="py-16 bg-[#348726]">
-        <div className="max-w-6xl mx-auto px-4 text-center">
-          <h2 className="text-3xl lg:text-4xl font-bold text-white mb-3" style={{ fontFamily: 'Georgia, serif' }}>
-            Ready to Eat?
-          </h2>
-          <p className="text-white/80 text-lg mb-8 max-w-md mx-auto">
-            Skip the line. Order online for faster pickup.
-          </p>
-          <div className="flex gap-4 justify-center flex-wrap">
-            <Link href="/order">
-              <button className="inline-flex items-center gap-2 bg-white text-[#348726] font-bold text-base px-8 py-3.5 rounded-md hover:bg-white/90 transition-colors">
-                Order Now
-              </button>
-            </Link>
-            <Link href="/events">
-              <button className="inline-flex items-center gap-2 bg-transparent text-white font-medium text-base px-8 py-3.5 rounded-md border border-white/30 hover:bg-white/10 transition-colors">
-                View Specials
+          <div className="text-center mt-10">
+            <Link href="/our-menu">
+              <button className="bg-[#1a1a1a] hover:bg-[#333] text-white font-semibold px-8 py-3.5 rounded-full transition-colors">
+                View Full Menu <ArrowRight className="inline h-4 w-4 ml-2" />
               </button>
             </Link>
           </div>
         </div>
       </section>
+
+      {/* ════════════════════════════════════════════════
+          SUNDAY BUFFET — Prominent event section
+          From D&K flyer: yellow background, bold pricing
+          ════════════════════════════════════════════════ */}
+      {publicEvents && publicEvents.length > 0 && (
+        <section className="py-16 bg-[#f9c80e]">
+          <div className="max-w-6xl mx-auto px-6">
+            <Link href="/events" className="block group">
+              <div className="text-center">
+                <p className="text-[#1a1a1a]/60 font-bold text-sm uppercase tracking-widest mb-2">
+                  Every {publicEvents[0].dayOfWeek !== undefined ? DAYS[publicEvents[0].dayOfWeek] : 'Week'}
+                  {' · '}{publicEvents[0].startTime} – {publicEvents[0].endTime}
+                </p>
+                <h2 className="text-4xl lg:text-6xl font-black text-[#1a1a1a] mb-2" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
+                  {publicEvents[0].name}
+                </h2>
+
+                {publicEvents[0].pricingTiers && (
+                  <div className="flex gap-6 lg:gap-10 justify-center mt-8 flex-wrap">
+                    {publicEvents[0].pricingTiers.map((tier: any) => (
+                      <div key={tier._id} className="bg-[#1a1a1a] rounded-2xl px-8 py-6 text-center min-w-[140px] shadow-xl group-hover:scale-105 transition-transform">
+                        <p className="text-white/60 text-sm font-medium mb-1">{tier.tierName}</p>
+                        <p className="text-4xl font-black text-white">${(tier.price / 100).toFixed(2)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-[#1a1a1a]/50 text-sm mt-6 group-hover:text-[#1a1a1a]/70 transition-colors">
+                  Last Seating 5pm · View Details →
+                </p>
+              </div>
+            </Link>
+          </div>
+        </section>
+      )}
+
+      {/* ════════════════════════════════════════════════
+          TODAY'S SPECIAL
+          ════════════════════════════════════════════════ */}
+      {todaySpecial && (
+        <section className="py-16 bg-[#1a1a1a]">
+          <div className="max-w-4xl mx-auto px-6">
+            <Link href="/events" className="block group">
+              <div className="text-center mb-8">
+                <div className="inline-flex items-center gap-2 bg-[#d32f2f] text-white text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full mb-4">
+                  <Star className="h-3 w-3" /> Today&apos;s Special · {DAYS[today]}
+                </div>
+                <h2 className="text-3xl lg:text-4xl font-bold text-white" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
+                  {todaySpecial.name}
+                </h2>
+                {todaySpecial.description && (
+                  <p className="text-white/50 mt-2 max-w-md mx-auto">{todaySpecial.description}</p>
+                )}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {todaySpecial.items.map((item: any, idx: number) => (
+                  <div key={idx} className="flex items-center justify-between bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl px-5 py-4 group-hover:bg-white/10 transition-colors">
+                    <div>
+                      <p className="font-semibold text-white">{item.name}</p>
+                      {item.description && <p className="text-white/40 text-sm">{item.description}</p>}
+                    </div>
+                    <span className="text-2xl font-black text-[#f9c80e] ml-4">${(item.price / 100).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+
+              <p className="text-center text-white/30 text-sm mt-6 group-hover:text-white/50 transition-colors">
+                View all specials →
+              </p>
+            </Link>
+          </div>
+        </section>
+      )}
+
+      {/* ════════════════════════════════════════════════
+          FOOD GALLERY — Instagram-style grid
+          Inspired by His Place social feed
+          ════════════════════════════════════════════════ */}
+      {itemsWithImages.length > 0 && (
+        <section className="py-0 bg-white">
+          <div className="grid grid-cols-4 md:grid-cols-8">
+            {itemsWithImages.slice(0, 8).map((item: any, idx: number) => (
+              <div key={idx} className="aspect-square overflow-hidden relative group">
+                <img
+                  src={item.imageUrl}
+                  alt={item.name}
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors flex items-end">
+                  <p className="text-white text-xs font-medium p-2 opacity-0 group-hover:opacity-100 transition-opacity truncate w-full">
+                    {item.name}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ════════════════════════════════════════════════
+          ABOUT & HOURS — Split layout
+          Warm background, community feel from Soulé/Lo-Lo's
+          ════════════════════════════════════════════════ */}
+      <section className="py-16 bg-[#f5f0e8]">
+        <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-2 gap-12">
+          {/* About */}
+          <div>
+            <p className="text-[#d32f2f] font-bold text-sm uppercase tracking-widest mb-3">About Us</p>
+            <h2 className="text-3xl font-bold text-[#1a1a1a] mb-4" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
+              {tenant.name}
+            </h2>
+            {tenant.aboutText && (
+              <p className="text-[#4a4a4a] leading-relaxed mb-6">{tenant.aboutText}</p>
+            )}
+            <Link href="/about">
+              <span className="text-[#d32f2f] font-semibold text-sm hover:underline">Read Our Story →</span>
+            </Link>
+          </div>
+
+          {/* Hours */}
+          <div>
+            <p className="text-[#d32f2f] font-bold text-sm uppercase tracking-widest mb-3">Hours</p>
+            <h2 className="text-3xl font-bold text-[#1a1a1a] mb-4" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
+              Visit Us
+            </h2>
+            {tenant.businessHours && (
+              <div className="space-y-0 rounded-xl overflow-hidden border border-[#ddd5c5]">
+                {tenant.businessHours.map((h: any) => (
+                  <div
+                    key={h.day}
+                    className={`flex justify-between px-5 py-3 text-sm ${
+                      h.day === today
+                        ? 'bg-[#d32f2f] text-white font-bold'
+                        : 'bg-white text-[#4a4a4a] border-b border-[#eee5d5]'
+                    }`}
+                  >
+                    <span>{DAYS[h.day]}</span>
+                    <span>{h.isClosed ? 'Closed' : `${h.open} – ${h.close}`}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-5 space-y-2">
+              {tenant.phone && (
+                <a href={`tel:${tenant.phone}`} className="flex items-center gap-2 text-[#1a1a1a] font-semibold hover:text-[#d32f2f] transition-colors">
+                  <Phone className="h-4 w-4" /> {tenant.phone}
+                </a>
+              )}
+              {tenant.address && (
+                <p className="flex items-center gap-2 text-[#4a4a4a] text-sm">
+                  <MapPin className="h-4 w-4 flex-shrink-0" />
+                  {tenant.address.street}, {tenant.address.city}, {tenant.address.state} {tenant.address.zip}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════
+          BOTTOM CTA — Bold red
+          ════════════════════════════════════════════════ */}
+      <section className="py-20 bg-[#d32f2f]">
+        <div className="max-w-6xl mx-auto px-6 text-center">
+          <h2 className="text-4xl lg:text-5xl font-black text-white mb-3" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
+            Ready to Eat?
+          </h2>
+          <p className="text-white/70 text-lg mb-8 max-w-md mx-auto">
+            Order online for faster pickup. We&apos;ll have it ready when you arrive.
+          </p>
+          <div className="flex gap-4 justify-center flex-wrap">
+            <Link href="/order">
+              <button className="bg-white text-[#d32f2f] font-bold text-lg px-10 py-4 rounded-full hover:bg-white/90 transition-colors shadow-lg">
+                Order Now
+              </button>
+            </Link>
+            <Link href="/our-menu">
+              <button className="bg-transparent text-white font-semibold text-lg px-10 py-4 rounded-full border-2 border-white/40 hover:bg-white/10 transition-colors">
+                View Menu
+              </button>
+            </Link>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════
+   Food Card Component — large image with overlay text
+   ════════════════════════════════════════════════ */
+function FoodCard({ item, large }: { item: any; large?: boolean }) {
+  const storageUrl = useQuery(
+    api.menu.queries.getImageUrl,
+    item.imageStorageId ? { storageId: item.imageStorageId } : 'skip'
+  );
+  const imgSrc = storageUrl || item.imageUrl;
+
+  return (
+    <div className={`relative rounded-2xl overflow-hidden group cursor-pointer ${large ? 'row-span-2 col-span-2 lg:col-span-1 lg:row-span-2' : ''}`}>
+      <div className={`${large ? 'aspect-[3/4]' : 'aspect-square'} bg-gray-100`}>
+        {imgSrc && (
+          <img
+            src={imgSrc}
+            alt={item.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          />
+        )}
+      </div>
+      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+      <div className="absolute bottom-0 left-0 right-0 p-4">
+        <p className="text-white font-bold text-sm lg:text-base">{item.name}</p>
+        <p className="text-[#f9c80e] font-bold">${(item.price / 100).toFixed(2)}</p>
+      </div>
     </div>
   );
 }
