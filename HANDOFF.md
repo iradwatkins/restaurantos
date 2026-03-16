@@ -89,9 +89,32 @@
 | public/queries (added) | getPublicEvents, getTodaySpecial, getDailySpecials, getCateringMenu |
 
 ### Known Issues / TODO
-- **Buffet tier images**: Currently using placeholder images (Black couple from Pexels, Black women cooking, Black mom+child). Need to be replaced with specific images of Black adults/seniors/kids eating at a buffet. Owner can find images on nappy.co and provide URLs.
-- **Convex file storage URLs**: Return relative paths (`/api/storage/...`) that don't resolve in production. All menu item images use `imageUrl` (external URLs) instead. Need to fix Convex storage URL resolution or proxy through Next.js.
-- **Today's Special on homepage**: Shows when daily special exists for current day. Needs testing across all days.
+
+**CRITICAL (Fix Before Launch):**
+1. **Client-side password hashing** — `settings-content.tsx` uses bcryptjs on the browser to hash staff passwords. Must move to server action or API route. Security vulnerability.
+2. **Convex file storage URLs broken in production** — `ctx.storage.getUrl()` returns relative paths (`/api/storage/...`). All D&K items use `imageUrl` (external URLs) as workaround. Need to proxy through Next.js or standardize on `imageUrl`.
+3. **Verify alcohol filtering** — `public/queries.ts getMenu` filters alcohol server-side, but add client-side safety filter on ordering page too.
+
+**HIGH (Next Sprint):**
+4. **Buffet tier images** — Placeholders (Black couple, women cooking, mom+child). Owner should find proper images on nappy.co and provide URLs.
+5. **Color scheme inconsistent** — Nav CTA is green (#348726), rest of site is red (#d32f2f). Pick one.
+6. **Hardcoded content** — "Yes We Deliver", "DoorDash"/"Uber Eats", "Last Seating 5pm", "Fresh food, great service" in footer, hero fallback image. Should all be tenant-configurable.
+7. **Footer missing social links** — Tenant has `socialLinks` field but footer doesn't display them.
+8. **Accessibility gaps** — Generic alt text, no active nav link indicator, missing aria-labels on maps iframe, mobile menu no close-on-outside-click.
+9. **Form validation missing** — Alcohol sale hours (no start < end check), liquor license expiry (not checked), order tracking phone (accepts anything), scheduled pickup (not validated against hours).
+
+**MEDIUM:**
+10. **About page empty** — No hero image, just plain text.
+11. **Menu page** — No 86'd item indicator, no broken image fallback.
+12. **Reports page** — No date range selector, only top 5 items today.
+13. **Order tracking** — "No order found" doesn't distinguish wrong # vs wrong phone.
+14. **Timezone support** — Only 4 US timezones in settings.
+15. **Color picker broken** — Branding hex field doesn't sync with picker.
+
+**LOW:**
+16. **Logo upload** — Currently URL only, no file upload.
+17. **Card payment in POS** — Stubbed, shows "coming in Sprint 2.5".
+18. **Today's Special** — Shows nothing when no special exists for current day. Should show "Check our daily specials" link.
 
 ---
 
