@@ -202,12 +202,25 @@ export default function HomeContent() {
 
                 {publicEvents[0].pricingTiers && (
                   <div className="flex gap-6 lg:gap-10 justify-center mt-8 flex-wrap">
-                    {publicEvents[0].pricingTiers.map((tier: any) => (
-                      <div key={tier._id} className="bg-[#1a1a1a] rounded-2xl px-8 py-6 text-center min-w-[140px] shadow-xl group-hover:scale-105 transition-transform">
-                        <p className="text-white/60 text-sm font-medium mb-1">{tier.tierName}</p>
-                        <p className="text-4xl font-black text-white">${(tier.price / 100).toFixed(2)}</p>
-                      </div>
-                    ))}
+                    {publicEvents[0].pricingTiers.map((tier: any) => {
+                      const tierImg: Record<string, string> = {
+                        'Adults': 'https://images.pexels.com/photos/6579011/pexels-photo-6579011.jpeg?auto=compress&cs=tinysrgb&w=400',
+                        'Seniors': 'https://images.pexels.com/photos/4261996/pexels-photo-4261996.jpeg?auto=compress&cs=tinysrgb&w=400',
+                        'Kids 2-12': 'https://images.nappy.co/photo/03qeoT4iedlmbDo67TcCO.jpg?w=400',
+                      };
+                      const img = tierImg[tier.tierName];
+                      return (
+                        <div key={tier._id} className="bg-[#1a1a1a] rounded-2xl overflow-hidden text-center min-w-[160px] shadow-xl group-hover:scale-105 transition-transform">
+                          {img && (
+                            <img src={img} alt={tier.tierName} className="w-full h-32 object-cover" />
+                          )}
+                          <div className="px-6 py-4">
+                            <p className="text-white/60 text-sm font-medium mb-1">{tier.tierName}</p>
+                            <p className="text-3xl font-black text-white">${(tier.price / 100).toFixed(2)}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 

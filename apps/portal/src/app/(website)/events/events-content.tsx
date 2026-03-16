@@ -16,12 +16,12 @@ import { CalendarDays, Clock, Users, Utensils, Star } from 'lucide-react';
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const SHORT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-// Soul food images for buffet pricing tier backgrounds
+// Buffet pricing tier images — Black people (replace with better ones via portal)
 const TIER_IMAGES: Record<string, string> = {
-  'Adults': 'https://iheartrecipes.com/wp-content/uploads/2018/03/friedchicken6-1-scaled.jpg',
-  'Seniors': 'https://www.munatycooking.com/wp-content/uploads/2023/06/Smothered-chicken-feature-image-2023-1-e1747245495976.jpg',
-  'Kids 2-12': 'https://images.pexels.com/photos/2092897/pexels-photo-2092897.jpeg?auto=compress&cs=tinysrgb&w=800',
-  'default': 'https://iheartrecipes.com/wp-content/uploads/2017/03/friedchicken5-1024x683.jpg',
+  'Adults': 'https://images.pexels.com/photos/6579011/pexels-photo-6579011.jpeg?auto=compress&cs=tinysrgb&w=800',
+  'Seniors': 'https://images.pexels.com/photos/4261996/pexels-photo-4261996.jpeg?auto=compress&cs=tinysrgb&w=800',
+  'Kids 2-12': 'https://images.nappy.co/photo/03qeoT4iedlmbDo67TcCO.jpg?w=800',
+  'default': 'https://images.pexels.com/photos/6579011/pexels-photo-6579011.jpeg?auto=compress&cs=tinysrgb&w=800',
 };
 
 export default function EventsContent() {
