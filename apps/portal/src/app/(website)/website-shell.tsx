@@ -26,6 +26,7 @@ export function WebsiteShell({
         tenantName={tenantName}
         logoUrl={logoUrl}
         hasCatering={hasCatering}
+        phone={phone}
       />
       <main className="flex-1">{children}</main>
       <WebsiteFooter
