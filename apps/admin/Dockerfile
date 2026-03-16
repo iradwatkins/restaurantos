@@ -2,6 +2,8 @@ FROM node:20-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 COPY . .
+ARG NEXT_PUBLIC_CONVEX_URL=http://72.60.28.175:3214
+ENV NEXT_PUBLIC_CONVEX_URL=$NEXT_PUBLIC_CONVEX_URL
 RUN pnpm install --frozen-lockfile
 RUN pnpm turbo build --filter=@restaurantos/admin
 
@@ -14,5 +16,4 @@ COPY --from=builder /app/apps/admin/.next/static ./apps/admin/.next/static
 USER nextjs
 EXPOSE 3005
 ENV PORT=3005
-HEALTHCHECK --interval=30s --timeout=3s CMD wget -q --spider http://localhost:3005/api/health || exit 1
 CMD ["node", "apps/admin/server.js"]
