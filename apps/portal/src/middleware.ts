@@ -1,7 +1,20 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const PUBLIC_PATHS = ['/login', '/api/auth/login', '/.well-known', '/order', '/api/webhooks'];
+// Exact public paths or path prefixes (with trailing slash to avoid /orders matching /order)
+const PUBLIC_PATH_PREFIXES = ['/login', '/api/auth/login', '/.well-known', '/api/webhooks', '/api/stripe'];
+const PUBLIC_PATH_EXACT = ['/order'];
+const PUBLIC_PATH_STARTS = ['/order/']; // matches /order/track etc.
+
+// Website paths — public when subdomain is present
+const WEBSITE_PATHS = ['/', '/our-menu', '/about', '/contact', '/catering', '/events'];
+
+function isPublicPath(pathname: string): boolean {
+  if (PUBLIC_PATH_PREFIXES.some((p) => pathname.startsWith(p))) return true;
+  if (PUBLIC_PATH_EXACT.includes(pathname)) return true;
+  if (PUBLIC_PATH_STARTS.some((p) => pathname.startsWith(p))) return true;
+  return false;
+}
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -33,10 +46,17 @@ export function middleware(request: NextRequest) {
   const response = NextResponse.next();
   response.headers.set('x-tenant-subdomain', subdomain);
 
-  if (PUBLIC_PATHS.some((path) => pathname.startsWith(path))) {
+  // Always allow public paths
+  if (isPublicPath(pathname)) {
     return response;
   }
 
+  // Allow website paths when subdomain is present (public restaurant website)
+  if (WEBSITE_PATHS.some((path) => pathname === path)) {
+    return response;
+  }
+
+  // Dashboard routes require auth
   const sessionCookie = request.cookies.get(`${subdomain}_session_token`);
   if (!sessionCookie?.value) {
     const loginUrl = new URL('/login', request.url);

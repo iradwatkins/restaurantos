@@ -23,6 +23,7 @@ import {
 import { ArrowLeft, Settings, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { DeliveryToggle } from '@/components/delivery-toggle';
+import { TenantEditForm } from '@/components/tenant-edit-form';
 
 export default async function TenantDetailPage({
   params,
@@ -120,6 +121,9 @@ export default async function TenantDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit Form */}
+      <TenantEditForm tenant={tenant} />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">

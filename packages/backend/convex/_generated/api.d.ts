@@ -10,6 +10,12 @@
 
 import type * as admin_mutations from "../admin/mutations.js";
 import type * as admin_queries from "../admin/queries.js";
+import type * as catering_mutations from "../catering/mutations.js";
+import type * as catering_queries from "../catering/queries.js";
+import type * as dailySpecials_mutations from "../dailySpecials/mutations.js";
+import type * as dailySpecials_queries from "../dailySpecials/queries.js";
+import type * as events_mutations from "../events/mutations.js";
+import type * as events_queries from "../events/queries.js";
 import type * as kds_mutations from "../kds/mutations.js";
 import type * as kds_queries from "../kds/queries.js";
 import type * as lib_auth from "../lib/auth.js";
@@ -38,6 +44,12 @@ import type {
 declare const fullApi: ApiFromModules<{
   "admin/mutations": typeof admin_mutations;
   "admin/queries": typeof admin_queries;
+  "catering/mutations": typeof catering_mutations;
+  "catering/queries": typeof catering_queries;
+  "dailySpecials/mutations": typeof dailySpecials_mutations;
+  "dailySpecials/queries": typeof dailySpecials_queries;
+  "events/mutations": typeof events_mutations;
+  "events/queries": typeof events_queries;
   "kds/mutations": typeof kds_mutations;
   "kds/queries": typeof kds_queries;
   "lib/auth": typeof lib_auth;

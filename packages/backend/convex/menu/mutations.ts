@@ -9,6 +9,11 @@ export const createCategory = mutation({
     name: v.string(),
     description: v.optional(v.string()),
     sortOrder: v.optional(v.number()),
+    menuType: v.optional(
+      v.union(v.literal("all"), v.literal("lunch"), v.literal("dinner"))
+    ),
+    visibleFrom: v.optional(v.string()),
+    visibleTo: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Auto-calculate sort order if not provided
@@ -27,6 +32,9 @@ export const createCategory = mutation({
       description: args.description,
       sortOrder,
       isActive: true,
+      menuType: args.menuType ?? "all",
+      visibleFrom: args.visibleFrom,
+      visibleTo: args.visibleTo,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
@@ -40,6 +48,11 @@ export const updateCategory = mutation({
     description: v.optional(v.string()),
     sortOrder: v.optional(v.number()),
     isActive: v.optional(v.boolean()),
+    menuType: v.optional(
+      v.union(v.literal("all"), v.literal("lunch"), v.literal("dinner"))
+    ),
+    visibleFrom: v.optional(v.string()),
+    visibleTo: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
@@ -74,8 +87,21 @@ export const createItem = mutation({
     description: v.optional(v.string()),
     price: v.number(),
     imageUrl: v.optional(v.string()),
+    imageStorageId: v.optional(v.id("_storage")),
     dietaryTags: v.optional(v.array(v.string())),
     prepTimeMinutes: v.optional(v.number()),
+    type: v.optional(
+      v.union(
+        v.literal("food"),
+        v.literal("beer"),
+        v.literal("wine"),
+        v.literal("spirits"),
+        v.literal("non_alcoholic_beverage")
+      )
+    ),
+    isSpecial: v.optional(v.boolean()),
+    availableFrom: v.optional(v.number()),
+    availableTo: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     // Get sort order
@@ -91,11 +117,16 @@ export const createItem = mutation({
       description: args.description,
       price: args.price,
       imageUrl: args.imageUrl,
+      imageStorageId: args.imageStorageId,
       dietaryTags: args.dietaryTags,
       isAvailable: true,
       is86d: false,
       sortOrder: existing.length,
       prepTimeMinutes: args.prepTimeMinutes,
+      type: args.type ?? "food",
+      isSpecial: args.isSpecial ?? false,
+      availableFrom: args.availableFrom,
+      availableTo: args.availableTo,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
@@ -109,10 +140,23 @@ export const updateItem = mutation({
     description: v.optional(v.string()),
     price: v.optional(v.number()),
     imageUrl: v.optional(v.string()),
+    imageStorageId: v.optional(v.id("_storage")),
     dietaryTags: v.optional(v.array(v.string())),
     isAvailable: v.optional(v.boolean()),
     prepTimeMinutes: v.optional(v.number()),
     categoryId: v.optional(v.id("menuCategories")),
+    type: v.optional(
+      v.union(
+        v.literal("food"),
+        v.literal("beer"),
+        v.literal("wine"),
+        v.literal("spirits"),
+        v.literal("non_alcoholic_beverage")
+      )
+    ),
+    isSpecial: v.optional(v.boolean()),
+    availableFrom: v.optional(v.number()),
+    availableTo: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
@@ -182,5 +226,67 @@ export const createModifierOption = mutation({
       isAvailable: true,
       sortOrder: args.sortOrder ?? 0,
     });
+  },
+});
+
+export const updateModifierGroup = mutation({
+  args: {
+    id: v.id("modifierGroups"),
+    name: v.optional(v.string()),
+    minSelections: v.optional(v.number()),
+    maxSelections: v.optional(v.number()),
+    menuItemIds: v.optional(v.array(v.id("menuItems"))),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...updates } = args;
+    await ctx.db.patch(id, { ...updates, updatedAt: Date.now() });
+  },
+});
+
+export const deleteModifierGroup = mutation({
+  args: { id: v.id("modifierGroups") },
+  handler: async (ctx, args) => {
+    // Delete all options in this group first
+    const options = await ctx.db
+      .query("modifierOptions")
+      .withIndex("by_groupId", (q) => q.eq("groupId", args.id))
+      .collect();
+
+    for (const option of options) {
+      await ctx.db.delete(option._id);
+    }
+
+    await ctx.db.delete(args.id);
+  },
+});
+
+export const updateModifierOption = mutation({
+  args: {
+    id: v.id("modifierOptions"),
+    name: v.optional(v.string()),
+    priceAdjustment: v.optional(v.number()),
+    isDefault: v.optional(v.boolean()),
+    isAvailable: v.optional(v.boolean()),
+    sortOrder: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...updates } = args;
+    await ctx.db.patch(id, updates);
+  },
+});
+
+export const deleteModifierOption = mutation({
+  args: { id: v.id("modifierOptions") },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.id);
+  },
+});
+
+// ==================== File Storage ====================
+
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
   },
 });

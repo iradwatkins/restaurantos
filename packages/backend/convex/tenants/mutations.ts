@@ -146,6 +146,109 @@ export const update = mutation({
   },
 });
 
+export const updateSettings = mutation({
+  args: {
+    id: v.id("tenants"),
+    taxRate: v.optional(v.number()),
+    businessHours: v.optional(
+      v.array(
+        v.object({
+          day: v.number(),
+          open: v.string(),
+          close: v.string(),
+          isClosed: v.boolean(),
+        })
+      )
+    ),
+    holidayHours: v.optional(
+      v.array(
+        v.object({
+          date: v.string(),
+          open: v.optional(v.string()),
+          close: v.optional(v.string()),
+          isClosed: v.boolean(),
+          label: v.optional(v.string()),
+        })
+      )
+    ),
+    liquorLicenseNumber: v.optional(v.string()),
+    liquorLicenseExpiry: v.optional(v.number()),
+    alcoholSaleHoursStart: v.optional(v.string()),
+    alcoholSaleHoursEnd: v.optional(v.string()),
+    onlineOrderingSettings: v.optional(
+      v.object({
+        enabled: v.boolean(),
+        minimumOrderCents: v.optional(v.number()),
+        pickupTimeSlotMinutes: v.optional(v.number()),
+        defaultPrepTimeMinutes: v.optional(v.number()),
+      })
+    ),
+    tagline: v.optional(v.string()),
+    aboutText: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    email: v.optional(v.string()),
+    address: v.optional(
+      v.object({
+        street: v.string(),
+        city: v.string(),
+        state: v.string(),
+        zip: v.string(),
+        country: v.string(),
+      })
+    ),
+    timezone: v.optional(v.string()),
+    // Website settings
+    websiteEnabled: v.optional(v.boolean()),
+    heroImageStorageId: v.optional(v.id("_storage")),
+    featuredItemIds: v.optional(v.array(v.id("menuItems"))),
+    socialLinks: v.optional(
+      v.object({
+        facebook: v.optional(v.string()),
+        instagram: v.optional(v.string()),
+        twitter: v.optional(v.string()),
+        yelp: v.optional(v.string()),
+      })
+    ),
+    googleMapsEmbedUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...updates } = args;
+    // Filter out undefined values so we only patch what was provided
+    const cleanUpdates: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(updates)) {
+      if (value !== undefined) {
+        cleanUpdates[key] = value;
+      }
+    }
+    cleanUpdates.updatedAt = Date.now();
+    await ctx.db.patch(id, cleanUpdates);
+  },
+});
+
+export const updateTheme = mutation({
+  args: {
+    themeId: v.id("tenantThemes"),
+    updates: v.any(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.themeId, { ...args.updates, updatedAt: Date.now() });
+  },
+});
+
+export const updateBranding = mutation({
+  args: {
+    id: v.id("tenants"),
+    logoUrl: v.optional(v.string()),
+    primaryColor: v.optional(v.string()),
+    accentColor: v.optional(v.string()),
+    fontFamily: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...updates } = args;
+    await ctx.db.patch(id, { ...updates, updatedAt: Date.now() });
+  },
+});
+
 export const switchDeliveryMode = mutation({
   args: {
     tenantId: v.id("tenants"),

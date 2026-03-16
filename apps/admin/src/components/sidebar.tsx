@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Store, Settings, Shield } from 'lucide-react';
+import { LayoutDashboard, Store, Settings, Shield, ScrollText } from 'lucide-react';
 import { cn } from '@restaurantos/ui';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Tenants', href: '/tenants', icon: Store },
+  { name: 'Audit Logs', href: '/audit-logs', icon: ScrollText },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 

@@ -1,12 +1,57 @@
 # RestaurantOS — Project Handoff Document
 
 **Date:** March 16, 2026
-**Status:** MVP Complete — All 5 Sprints Delivered
+**Status:** MVP Complete + Restaurant Buildout (Phases 1-5)
 **Repo:** https://github.com/iradwatkins/restaurantos
 
 ---
 
-## What Was Built
+## What Was Built (Phase 2 — Restaurant Buildout)
+
+### Phase 1: Menu Enhancements + Portal Settings
+- **Menu item types**: food, beer, wine, spirits, non-alcoholic beverage
+- **Alcohol compliance**: liquor license tracking, sale hour restrictions, POS age verification prompts, alcohol blocked from online ordering
+- **Image uploads**: Convex file storage integration for menu item photos
+- **Specials/LTO**: items with start/end dates, "Special" badges
+- **Modifier management UI**: create/edit/delete modifier groups and options per item
+- **Category dayparts**: lunch/dinner categories with time-based visibility
+- **Portal settings page** (7 tabs): Business Info, Hours, Tax & Fees, Alcohol, Staff, Online Ordering, Branding
+- **Dynamic tax rate**: configurable per restaurant (replaces hardcoded 8.75%)
+- **Business hours**: day-by-day configuration with open/close times
+- **Staff management**: add/edit/deactivate staff, reset passwords from portal
+
+### Phase 2: Online Ordering + Stripe Payment
+- **Modifier selection**: customers choose modifiers when adding items (radio/checkbox, min/max enforcement)
+- **Scheduled pickup**: time slot selector based on restaurant's pickup interval settings
+- **Stripe Elements payment**: card payment form at checkout (requires STRIPE_SECRET_KEY + NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
+- **Estimated ready time**: auto-calculated from max item prep time
+- **Order tracking page** (/order/track): customer enters order # + phone, real-time status via Convex subscription
+- **Stripe API routes**: POST /api/stripe/create-payment-intent, POST /api/stripe/webhook
+
+### Phase 3: Public Restaurant Website
+- **Full branded website** per tenant at their subdomain
+- **Pages**: Home (hero, featured items, hours, CTA), Menu (/our-menu), About, Contact (with Google Maps embed)
+- **Responsive navigation**: desktop nav + mobile hamburger menu
+- **Branded footer**: quick links, contact info, "Powered by RestaurantOS"
+- **Website settings tab**: enable/disable, social links, Google Maps embed URL
+- **Middleware refactor**: website paths (/, /our-menu, /about, /contact, /catering) are public when accessed via subdomain
+
+### Phase 4: Catering System ($79/mo Add-on)
+- **3 new Convex tables**: cateringCategories, cateringMenuItems, cateringOrders
+- **Public catering page** (/catering): menu display with serving sizes/pricing, order form (event date, headcount, pickup/delivery), deposit calculation (50% upfront)
+- **Portal catering management** (/catering-mgmt): order queue with status workflow (inquiry → confirmed → deposit_paid → preparing → ready → completed), upcoming events calendar view, catering menu CRUD
+- **Feature-gated**: only visible when tenant.features.catering is true
+
+### Phase 5: Admin Dashboard Overhaul
+- **Tenant list**: search by name/subdomain/email, filter by status/plan, checkbox bulk actions (suspend/activate), per-row actions
+- **Tenant detail edit form**: editable name, plan, phone, email, feature toggles (catering $79/mo, loyalty $49/mo, marketing $49/mo, reservations $39/mo)
+- **Analytics dashboard**: real metrics — active tenants, monthly orders, monthly revenue, webhook health, plan distribution, per-tenant revenue chart
+- **Audit logs page** (/audit-logs): paginated table with action badges, entity info, user, details
+- **2 new billing tables**: subscriptions, invoices (ready for Stripe Connect integration)
+
+---
+
+## What Was Built (Phase 1 — Original MVP)
 
 RestaurantOS is a white-label, multi-tenant restaurant management SaaS that consolidates POS, kitchen display, online ordering, and delivery aggregation (DoorDash, Uber Eats, Grubhub via KitchenHub) into one branded dashboard. It's designed to be sold by a reseller to independent restaurants at $249/month.
 
@@ -111,7 +156,7 @@ SSL certs auto-issued by Let's Encrypt via Traefik HTTP challenge.
 - Client onboarding seed script (npx convex run onboarding:onboardClient)
 - Full UI overhaul: Manrope/Fraunces fonts, indigo color scheme, 1rem border radius, CSS animations, SVG branding
 
-### Convex Database Schema (13 tables)
+### Convex Database Schema (18 tables)
 
 | Table | Purpose |
 |-------|---------|
@@ -131,8 +176,13 @@ SSL certs auto-issued by Let's Encrypt via Traefik HTTP challenge.
 | kdsTickets | Kitchen display tickets |
 | kdsBumpHistory | Recall queue for bumped tickets |
 | webhookLogs | Delivery webhook audit trail |
+| cateringCategories | Catering menu category groupings |
+| cateringMenuItems | Catering items with serving sizes and bulk pricing |
+| cateringOrders | Catering orders with deposit/balance tracking |
+| subscriptions | Stripe subscription state per tenant |
+| invoices | Stripe invoice records per tenant |
 
-### Convex Functions (8 modules, 30+ functions)
+### Convex Functions (9 modules, 60+ functions)
 
 - **admin/** — getAdminByEmail, createAdminUser, updateLastLogin
 - **tenants/** — list, getById, getBySubdomain, create, update, switchDeliveryMode
@@ -143,6 +193,7 @@ SSL certs auto-issued by Let's Encrypt via Traefik HTTP challenge.
 - **webhooks/** — ingestDeliveryOrder, logWebhookEvent, getRecentLogs, getFailedLogs
 - **public/** — getTenantBySubdomain, getMenu, getModifiersForItem, placeOrder
 - **reports/** — getDailySales, getTopItems
+- **catering/** — getCategories, getItems, getOrders, getOrderById, getUpcomingEvents, createCategory, updateCategory, createItem, updateItem, deleteItem, updateOrderStatus, recordDeposit, recordBalancePayment, placeCateringOrder
 - **onboarding** — onboardClient (full client setup with sample menu + tables)
 
 ---
@@ -155,132 +206,56 @@ SSL certs auto-issued by Let's Encrypt via Traefik HTTP challenge.
    - Currently using ephemeral keys that reset on server restart (tokens invalidate)
    - Run: `openssl genrsa -out private.pem 2048 && openssl rsa -in private.pem -pubout -out public.pem`
    - Base64-encode and set `JWT_PRIVATE_KEY` and `JWT_PUBLIC_KEY` env vars on both apps
-   - Update Convex auth.config.ts with production JWKS URLs
 
 2. **Change default passwords**
    - admin@restaurantos.com password needs to be changed from `admin123!@#`
    - Maria's Kitchen demo owner password needs to be changed
-   - Generate strong secrets for AUTH_SECRET and JWT_SECRET env vars
 
-3. **Stripe integration**
-   - Card payment in POS currently shows "Stripe terminal integration coming" placeholder
-   - Need: Stripe account approved for restaurant vertical, API keys configured
-   - Wire `STRIPE_SECRET_KEY` and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` env vars
-   - Implement Stripe Payment Intents in orders/mutations.ts and the Orders page pay dialog
-   - Online ordering checkout needs Stripe Elements or Checkout Session
+3. **Configure Stripe keys** (code is built, just needs credentials)
+   - Set `STRIPE_SECRET_KEY` and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` env vars
+   - Set `STRIPE_WEBHOOK_SECRET` for the /api/stripe/webhook endpoint
+   - POS card payment still shows placeholder — needs Stripe Terminal SDK for in-person payments
 
 4. **Twilio SMS confirmation**
    - Online orders should send SMS to customer with order number and estimated time
    - Need: Twilio account, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`
-   - Add Convex action that calls Twilio API after order placement
 
 5. **KitchenHub account setup**
    - Need KitchenHub reseller account and API credentials
-   - Configure `KITCHENHUB_API_URL`, `KITCHENHUB_API_KEY`, `KITCHENHUB_WEBHOOK_SECRET`
    - Add webhook signature verification in /api/webhooks/kitchenhub route
-   - Test with live DoorDash/UberEats/Grubhub test orders
 
 6. **Wildcard SSL for tenant subdomains**
-   - Currently each new tenant subdomain needs individual cert (HTTP challenge)
-   - To support unlimited tenants: set up Cloudflare DNS challenge on Traefik
-   - Requires adding `CF_DNS_API_TOKEN` to Traefik and a `dnsChallenge` cert resolver
+   - Set up Cloudflare DNS challenge on Traefik for unlimited tenant subdomains
    - Alternative: use Cloudflare proxy (orange cloud) which provides SSL automatically
 
-### Priority 2 — Feature Completions
+### Priority 2 — Remaining Feature Gaps
 
-7. **Menu photo uploads**
-   - Menu items have `imageUrl` field but no upload UI
-   - Use Convex file storage or S3-compatible storage (MinIO)
-   - Add photo upload to the menu item create/edit dialogs
+7. ~~Menu photo uploads~~ **DONE** — Convex file storage with upload UI
+8. **Receipt printing** — ESC/POS thermal printer or PDF generation
+9. **Floor plan visual editor** — drag-and-drop canvas for table positioning
+10. ~~Staff management in portal~~ **DONE** — settings page with 7 tabs
+11. **86 item sync to delivery platforms** — KitchenHub API call on toggle
+12. **Auto-confirmation of delivery orders** — within platform SLA windows
+13. **Order history and search** — completed/cancelled orders tab with search
+14. **POS Stripe Terminal** — in-person card reader (online payment is built)
 
-8. **Receipt printing**
-   - POS needs to print receipts (network printer or digital via email/SMS)
-   - Standard ESC/POS commands for thermal printers or PDF generation
+### Priority 3 — Post-MVP Roadmap
 
-9. **Floor plan visual editor**
-   - Tables have `posX`, `posY`, `shape` fields but no drag-and-drop visual layout
-   - Build a canvas-based floor plan editor for table positioning
-
-10. **Staff management in portal**
-    - Portal settings page is a placeholder
-    - Owners need to add/edit/remove their own staff (managers, servers, cashiers)
-    - Business hours configuration
-    - Tax rate configuration (currently hardcoded 8.75%)
-
-11. **86 item sync to delivery platforms**
-    - When an item is 86'd, it should propagate to KitchenHub to disable on DoorDash/UberEats/Grubhub
-    - Add a Convex action in the toggle86 mutation that calls KitchenHub API
-
-12. **Auto-confirmation of delivery orders**
-    - KitchenHub orders should be auto-confirmed within platform SLA windows
-    - DoorDash: 3 min, Uber Eats: 11.5 min
-    - Add scheduled Convex function or immediate confirmation in webhook handler
-
-13. **Order history and search**
-    - Orders page only shows active orders
-    - Add completed/cancelled order history tab
-    - Search by order number, customer name, date range
-
-### Priority 3 — Post-MVP Roadmap (Phase 1.5)
-
-14. **Catering module** ($79/mo add-on)
-    - Catering order entry with event date, headcount, delivery/pickup
-    - Separate catering menu with bulk pricing
-    - Deposit management and payment scheduling
-    - Event calendar view
-
-15. **Loyalty program** ($49/mo add-on)
-    - Points per dollar spent, tracked by phone number
-    - Reward redemption
-    - Tiered rewards (Bronze/Silver/Gold)
-
-16. **Email/SMS marketing** ($49/mo add-on)
-    - Send promotional emails/texts to customer list
-    - Automated re-engagement for inactive customers
-    - Birthday offers
-
-17. **Table reservations** ($39/mo add-on)
-    - Online reservation booking
-    - Integration with floor plan
-
-18. **Direct DoorDash/Uber Eats/Grubhub APIs** (Phase 2)
-    - Replace KitchenHub middleware to eliminate $55/mo cost per client
-    - Requires platform-specific API applications and approvals
-    - Admin toggle already built — just need the direct API adapters
-
-19. **Self-serve client onboarding** (Phase 2)
-    - Currently manual via admin dashboard or CLI
-    - Build a signup flow for restaurants to onboard themselves
-    - Stripe subscription creation during signup
-
-20. **Native iOS/Android KDS app** (Phase 3)
-    - Current KDS runs in tablet browser (works but not optimized)
-    - Native app for better performance and offline capability
+15. ~~Catering module~~ **DONE** — full system with public page, management dashboard, deposit tracking
+16. **Loyalty program** ($49/mo add-on) — points, tiers, rewards
+17. **Email/SMS marketing** ($49/mo add-on) — campaigns, re-engagement, birthday offers
+18. **Table reservations** ($39/mo add-on) — online booking + floor plan integration
+19. **Direct DoorDash/Uber Eats/Grubhub APIs** — replace KitchenHub to eliminate $55/mo
+20. **Self-serve client onboarding** — restaurant signup flow with Stripe subscription
+21. **Native iOS/Android KDS app** — offline-capable tablet app
 
 ### Priority 4 — Infrastructure & DevOps
 
-21. **CI/CD pipeline**
-    - No automated testing or deployment currently
-    - Set up GitHub Actions: lint → test → build → deploy to Coolify
-    - Run `npx convex deploy` on push to main
-
-22. **Monitoring and alerting**
-    - Add Sentry for error tracking (@sentry/nextjs)
-    - Webhook failure alerting (email when ingestion success rate drops below 98%)
-    - Uptime monitoring for all services
-
-23. **Database backups**
-    - Convex self-hosted stores data in SQLite
-    - Set up automated backups of `/convex/data` volume
-    - Consider migrating Convex to PostgreSQL backend for production reliability
-
-24. **Load testing**
-    - MVP spec requires 30 simultaneous orders without degradation
-    - Run load test with k6 or Artillery against the webhook endpoint and order creation
-
-25. **Remove unused containers**
-    - `restaurantos-postgres` (port 5433) — no longer needed after Convex migration
-    - `restaurantos-redis` (port 6380) — no longer needed
+22. **CI/CD pipeline** — GitHub Actions: lint → test → build → deploy
+23. **Monitoring** — Sentry error tracking, webhook failure alerting, uptime monitoring
+24. **Database backups** — automated /convex/data volume backups
+25. **Load testing** — 30 simultaneous orders target
+26. **Remove unused containers** — postgres (5433), redis (6380)
 
 ---
 
@@ -340,23 +315,52 @@ npx convex run onboarding:onboardClient '{
 
 | What | Where |
 |------|-------|
-| Convex schema | packages/backend/convex/schema.ts |
+| **Backend** | |
+| Convex schema (18 tables) | packages/backend/convex/schema.ts |
 | Convex auth config | packages/backend/convex/auth.config.ts |
-| Auth helpers | packages/backend/convex/lib/auth.ts |
-| Admin login | apps/admin/src/app/login/page.tsx |
-| Admin dashboard | apps/admin/src/app/(dashboard)/dashboard/page.tsx |
-| Portal login | apps/portal/src/app/login/page.tsx |
-| Portal sidebar | apps/portal/src/components/portal-sidebar.tsx |
+| Menu mutations (type, image, modifiers) | packages/backend/convex/menu/mutations.ts |
+| Menu queries (image URL, modifier groups) | packages/backend/convex/menu/queries.ts |
+| Public queries (alcohol filter, order tracking) | packages/backend/convex/public/queries.ts |
+| Public mutations (placeOrder with scheduling) | packages/backend/convex/public/mutations.ts |
+| Tenant mutations (settings, branding) | packages/backend/convex/tenants/mutations.ts |
+| User mutations (CRUD, password reset) | packages/backend/convex/users/mutations.ts |
+| Catering queries | packages/backend/convex/catering/queries.ts |
+| Catering mutations | packages/backend/convex/catering/mutations.ts |
+| Admin queries (analytics, audit logs) | packages/backend/convex/admin/queries.ts |
+| Admin mutations (tenant CRUD, bulk ops) | packages/backend/convex/admin/mutations.ts |
+| Onboarding script | packages/backend/convex/onboarding.ts |
+| **Admin App** | |
+| Admin dashboard (real analytics) | apps/admin/src/app/(dashboard)/dashboard/page.tsx |
+| Tenant list (search, filter, bulk) | apps/admin/src/app/(dashboard)/tenants/page.tsx |
+| Tenant detail + edit form | apps/admin/src/app/(dashboard)/tenants/[tenantId]/page.tsx |
+| Tenant edit form component | apps/admin/src/components/tenant-edit-form.tsx |
+| Audit logs | apps/admin/src/app/(dashboard)/audit-logs/page.tsx |
+| Admin sidebar | apps/admin/src/components/sidebar.tsx |
+| **Portal App — Dashboard** | |
+| Menu management (types, images, modifiers) | apps/portal/src/app/(dashboard)/menu/page.tsx |
+| POS / Orders (alcohol compliance, dynamic tax) | apps/portal/src/app/(dashboard)/orders/page.tsx |
+| Settings (7 tabs) | apps/portal/src/app/(dashboard)/settings/page.tsx |
+| Catering management | apps/portal/src/app/(dashboard)/catering-mgmt/page.tsx |
 | KDS page | apps/portal/src/app/(dashboard)/kds/page.tsx |
-| Menu management | apps/portal/src/app/(dashboard)/menu/page.tsx |
-| POS / Orders | apps/portal/src/app/(dashboard)/orders/page.tsx |
-| Online ordering | apps/portal/src/app/order/page.tsx |
 | Sales dashboard | apps/portal/src/app/(dashboard)/reports/page.tsx |
-| Webhook endpoint | apps/portal/src/app/api/webhooks/kitchenhub/route.ts |
+| Portal sidebar | apps/portal/src/components/portal-sidebar.tsx |
+| **Portal App — Public** | |
+| Online ordering (modifiers, Stripe, scheduling) | apps/portal/src/app/order/page.tsx |
+| Order tracking | apps/portal/src/app/order/track/page.tsx |
+| Stripe payment intent API | apps/portal/src/app/api/stripe/create-payment-intent/route.ts |
+| Stripe webhook | apps/portal/src/app/api/stripe/webhook/route.ts |
+| **Portal App — Public Website** | |
+| Website layout (nav + footer) | apps/portal/src/app/(website)/layout.tsx |
+| Home page (hero, featured, hours) | apps/portal/src/app/(website)/page.tsx |
+| Menu showcase | apps/portal/src/app/(website)/our-menu/page.tsx |
+| About page | apps/portal/src/app/(website)/about/page.tsx |
+| Contact page (hours, map) | apps/portal/src/app/(website)/contact/page.tsx |
+| Public catering page | apps/portal/src/app/(website)/catering/page.tsx |
+| Website navigation | apps/portal/src/app/(website)/website-nav.tsx |
+| Middleware (public + website routes) | apps/portal/src/middleware.ts |
+| **Auth & Config** | |
 | JWT/JWKS | apps/admin/src/lib/auth/jwks.ts |
 | Session manager | apps/admin/src/lib/auth/session-manager.ts |
 | Convex client | apps/admin/src/lib/auth/convex-client.ts |
-| CSS theme | apps/admin/src/app/globals.css |
-| Onboarding script | packages/backend/convex/onboarding.ts |
-| Seed script | packages/backend/convex/seed.ts |
-| Convex self-hosted env | packages/backend/.env.local |
+| Theme CSS generator | apps/portal/src/lib/theme.ts |
+| Tenant resolver | apps/portal/src/lib/tenant.ts |

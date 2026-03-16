@@ -62,3 +62,40 @@ export const getAvailableItems = query({
       .collect();
   },
 });
+
+export const getImageUrl = query({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    return await ctx.storage.getUrl(args.storageId);
+  },
+});
+
+export const getModifierGroupsForItem = query({
+  args: { tenantId: v.id("tenants"), menuItemId: v.id("menuItems") },
+  handler: async (ctx, args) => {
+    const groups = await ctx.db
+      .query("modifierGroups")
+      .withIndex("by_tenantId", (q) => q.eq("tenantId", args.tenantId))
+      .collect();
+
+    const applicable = groups.filter((g) =>
+      g.menuItemIds.includes(args.menuItemId)
+    );
+
+    const result = await Promise.all(
+      applicable.map(async (group) => {
+        const options = await ctx.db
+          .query("modifierOptions")
+          .withIndex("by_groupId", (q) => q.eq("groupId", group._id))
+          .collect();
+
+        return {
+          ...group,
+          options: options.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+        };
+      })
+    );
+
+    return result;
+  },
+});

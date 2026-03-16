@@ -54,6 +54,50 @@ export default defineSchema({
         country: v.string(),
       })
     ),
+    tagline: v.optional(v.string()),
+    aboutText: v.optional(v.string()),
+
+    // Tax & Fees
+    taxRate: v.optional(v.number()), // decimal e.g. 0.0875 = 8.75%
+
+    // Business Hours
+    businessHours: v.optional(
+      v.array(
+        v.object({
+          day: v.number(), // 0=Sunday through 6=Saturday
+          open: v.string(), // "09:00"
+          close: v.string(), // "22:00"
+          isClosed: v.boolean(),
+        })
+      )
+    ),
+    holidayHours: v.optional(
+      v.array(
+        v.object({
+          date: v.string(), // "2026-12-25"
+          open: v.optional(v.string()),
+          close: v.optional(v.string()),
+          isClosed: v.boolean(),
+          label: v.optional(v.string()), // "Christmas Day"
+        })
+      )
+    ),
+
+    // Alcohol / Liquor Compliance
+    liquorLicenseNumber: v.optional(v.string()),
+    liquorLicenseExpiry: v.optional(v.number()), // epoch ms
+    alcoholSaleHoursStart: v.optional(v.string()), // "07:00"
+    alcoholSaleHoursEnd: v.optional(v.string()), // "02:00"
+
+    // Online Ordering Settings
+    onlineOrderingSettings: v.optional(
+      v.object({
+        enabled: v.boolean(),
+        minimumOrderCents: v.optional(v.number()),
+        pickupTimeSlotMinutes: v.optional(v.number()), // e.g. 15 = every 15 min
+        defaultPrepTimeMinutes: v.optional(v.number()),
+      })
+    ),
 
     // Features & Plan
     features: v.optional(
@@ -72,6 +116,20 @@ export default defineSchema({
       v.literal("pro")
     ),
     stripeCustomerId: v.optional(v.string()),
+
+    // Website
+    websiteEnabled: v.optional(v.boolean()),
+    heroImageStorageId: v.optional(v.id("_storage")),
+    featuredItemIds: v.optional(v.array(v.id("menuItems"))),
+    socialLinks: v.optional(
+      v.object({
+        facebook: v.optional(v.string()),
+        instagram: v.optional(v.string()),
+        twitter: v.optional(v.string()),
+        yelp: v.optional(v.string()),
+      })
+    ),
+    googleMapsEmbedUrl: v.optional(v.string()),
 
     createdAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
@@ -202,6 +260,18 @@ export default defineSchema({
     description: v.optional(v.string()),
     sortOrder: v.number(),
     isActive: v.optional(v.boolean()),
+
+    // Daypart filtering
+    menuType: v.optional(
+      v.union(
+        v.literal("all"),
+        v.literal("lunch"),
+        v.literal("dinner")
+      )
+    ), // defaults to "all"
+    visibleFrom: v.optional(v.string()), // time like "11:00"
+    visibleTo: v.optional(v.string()), // time like "16:00"
+
     createdAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
   })
@@ -216,11 +286,29 @@ export default defineSchema({
     description: v.optional(v.string()),
     price: v.number(), // cents
     imageUrl: v.optional(v.string()),
+    imageStorageId: v.optional(v.id("_storage")), // Convex file storage
     dietaryTags: v.optional(v.array(v.string())), // vegan, gluten-free, etc.
     isAvailable: v.boolean(),
     is86d: v.optional(v.boolean()), // out of stock across all platforms
     sortOrder: v.optional(v.number()),
     prepTimeMinutes: v.optional(v.number()),
+
+    // Item type (food vs alcohol categories)
+    type: v.optional(
+      v.union(
+        v.literal("food"),
+        v.literal("beer"),
+        v.literal("wine"),
+        v.literal("spirits"),
+        v.literal("non_alcoholic_beverage")
+      )
+    ), // defaults to "food" in queries
+
+    // Limited Time Offers / Specials
+    isSpecial: v.optional(v.boolean()),
+    availableFrom: v.optional(v.number()), // epoch ms
+    availableTo: v.optional(v.number()), // epoch ms
+
     createdAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
   })
@@ -345,6 +433,8 @@ export default defineSchema({
     // External delivery order reference
     externalOrderId: v.optional(v.string()),
     estimatedPickupTime: v.optional(v.number()),
+    scheduledPickupTime: v.optional(v.number()), // customer-selected future pickup time
+    estimatedReadyAt: v.optional(v.number()), // calculated from prep times
 
     // Timestamps
     createdAt: v.number(),
@@ -444,6 +534,210 @@ export default defineSchema({
   })
     .index("by_tenantId", ["tenantId"])
     .index("by_tenantId_bumpedAt", ["tenantId", "bumpedAt"]),
+
+  // ==================== Catering: Categories ====================
+  cateringCategories: defineTable({
+    tenantId: v.id("tenants"),
+    name: v.string(),
+    sortOrder: v.number(),
+    isActive: v.boolean(),
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_tenantId", ["tenantId"]),
+
+  // ==================== Catering: Menu Items ====================
+  cateringMenuItems: defineTable({
+    tenantId: v.id("tenants"),
+    categoryId: v.id("cateringCategories"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    servingSize: v.string(), // "Serves 10-12"
+    pricePerPerson: v.optional(v.number()), // cents
+    flatPrice: v.optional(v.number()), // cents (alternative)
+    minimumQuantity: v.optional(v.number()),
+    imageStorageId: v.optional(v.id("_storage")),
+    isAvailable: v.boolean(),
+    sortOrder: v.optional(v.number()),
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_tenantId", ["tenantId"])
+    .index("by_categoryId", ["categoryId"]),
+
+  // ==================== Catering: Orders ====================
+  cateringOrders: defineTable({
+    tenantId: v.id("tenants"),
+    orderNumber: v.number(),
+    status: v.union(
+      v.literal("inquiry"),
+      v.literal("confirmed"),
+      v.literal("deposit_paid"),
+      v.literal("preparing"),
+      v.literal("ready"),
+      v.literal("completed"),
+      v.literal("cancelled")
+    ),
+
+    // Customer
+    customerName: v.string(),
+    customerPhone: v.string(),
+    customerEmail: v.optional(v.string()),
+
+    // Event
+    eventDate: v.number(), // epoch ms
+    eventTime: v.string(), // "18:00"
+    headcount: v.number(),
+    fulfillmentType: v.union(v.literal("pickup"), v.literal("delivery")),
+    deliveryAddress: v.optional(
+      v.object({
+        street: v.string(),
+        city: v.string(),
+        state: v.string(),
+        zip: v.string(),
+      })
+    ),
+
+    // Items
+    items: v.array(
+      v.object({
+        cateringMenuItemId: v.id("cateringMenuItems"),
+        name: v.string(),
+        quantity: v.number(),
+        unitPrice: v.number(), // cents
+        lineTotal: v.number(), // cents
+      })
+    ),
+
+    // Financials
+    subtotal: v.number(),
+    tax: v.number(),
+    total: v.number(),
+
+    // Deposit & Balance
+    depositRequired: v.number(), // cents
+    depositPaid: v.optional(v.number()),
+    depositPaidAt: v.optional(v.number()),
+    depositStripePaymentIntentId: v.optional(v.string()),
+    balanceDue: v.optional(v.number()),
+    balanceDueDate: v.optional(v.number()),
+    balancePaidAt: v.optional(v.number()),
+    balanceStripePaymentIntentId: v.optional(v.string()),
+
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_tenantId", ["tenantId"])
+    .index("by_tenantId_status", ["tenantId", "status"])
+    .index("by_tenantId_eventDate", ["tenantId", "eventDate"]),
+
+  // ==================== Billing: Subscriptions ====================
+  subscriptions: defineTable({
+    tenantId: v.id("tenants"),
+    stripeSubscriptionId: v.string(),
+    stripePriceId: v.string(),
+    status: v.union(
+      v.literal("active"),
+      v.literal("past_due"),
+      v.literal("canceled"),
+      v.literal("trialing")
+    ),
+    currentPeriodStart: v.number(),
+    currentPeriodEnd: v.number(),
+    cancelAtPeriodEnd: v.boolean(),
+    addons: v.optional(
+      v.array(
+        v.object({
+          name: v.string(), // "catering", "loyalty", etc.
+          stripePriceId: v.string(),
+          active: v.boolean(),
+        })
+      )
+    ),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_tenantId", ["tenantId"])
+    .index("by_stripeSubscriptionId", ["stripeSubscriptionId"]),
+
+  // ==================== Billing: Invoices ====================
+  invoices: defineTable({
+    tenantId: v.id("tenants"),
+    stripeInvoiceId: v.string(),
+    amountDue: v.number(), // cents
+    amountPaid: v.number(), // cents
+    status: v.string(), // paid, open, void, draft
+    invoiceDate: v.number(), // epoch ms
+    paidAt: v.optional(v.number()),
+    invoiceUrl: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_tenantId", ["tenantId"])
+    .index("by_stripeInvoiceId", ["stripeInvoiceId"]),
+
+  // ==================== Events ====================
+  events: defineTable({
+    tenantId: v.id("tenants"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    imageStorageId: v.optional(v.id("_storage")),
+    category: v.union(
+      v.literal("buffet"),
+      v.literal("special"),
+      v.literal("prix_fixe"),
+      v.literal("holiday"),
+      v.literal("other")
+    ),
+    recurrence: v.union(
+      v.literal("once"),
+      v.literal("weekly"),
+      v.literal("monthly")
+    ),
+    dayOfWeek: v.optional(v.number()), // 0=Sunday for weekly events
+    startDate: v.optional(v.number()), // epoch ms for one-time events
+    endDate: v.optional(v.number()),
+    startTime: v.string(), // "11:00"
+    endTime: v.string(), // "18:00"
+    isActive: v.boolean(),
+    sortOrder: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_tenantId", ["tenantId"]),
+
+  // ==================== Event Pricing Tiers ====================
+  eventPricingTiers: defineTable({
+    tenantId: v.id("tenants"),
+    eventId: v.id("events"),
+    tierName: v.string(), // "Adults", "Seniors", "Kids 2-12"
+    price: v.number(), // cents
+    sortOrder: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_tenantId", ["tenantId"]),
+
+  // ==================== Daily Specials ====================
+  dailySpecials: defineTable({
+    tenantId: v.id("tenants"),
+    dayOfWeek: v.number(), // 0=Sunday through 6=Saturday
+    name: v.string(), // "Tuesday Special"
+    description: v.optional(v.string()),
+    items: v.array(
+      v.object({
+        name: v.string(),
+        description: v.optional(v.string()),
+        price: v.number(), // cents
+      })
+    ),
+    startTime: v.optional(v.string()), // "11:00"
+    endTime: v.optional(v.string()), // "14:00"
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_tenantId", ["tenantId"])
+    .index("by_tenantId_dayOfWeek", ["tenantId", "dayOfWeek"]),
 
   // ==================== Webhook Ingestion Log ====================
   webhookLogs: defineTable({

@@ -12,6 +12,7 @@ export const placeOrder = mutation({
     customerEmail: v.optional(v.string()),
     orderType: v.union(v.literal("pickup"), v.literal("delivery")),
     specialInstructions: v.optional(v.string()),
+    scheduledPickupTime: v.optional(v.number()), // epoch ms — customer-selected future time
     items: v.array(
       v.object({
         menuItemId: v.id("menuItems"),
@@ -53,6 +54,13 @@ export const placeOrder = mutation({
 
     const orderNumber = todayOrders.length + 1;
 
+    // Calculate estimated ready time from max prep time of items
+    let estimatedReadyAt: number | undefined;
+    const maxPrepTime = await getMaxPrepTime(ctx, args.items.map((i) => i.menuItemId));
+    if (maxPrepTime > 0) {
+      estimatedReadyAt = (args.scheduledPickupTime ?? now) + maxPrepTime * 60 * 1000;
+    }
+
     const orderId = await ctx.db.insert("orders", {
       tenantId: args.tenantId,
       orderNumber,
@@ -70,16 +78,14 @@ export const placeOrder = mutation({
       paymentStatus: args.stripePaymentIntentId ? "paid" : "unpaid",
       paymentMethod: args.stripePaymentIntentId ? "card" : undefined,
       stripePaymentIntentId: args.stripePaymentIntentId,
+      scheduledPickupTime: args.scheduledPickupTime,
+      estimatedReadyAt,
       createdAt: now,
       sentToKitchenAt: now,
       updatedAt: now,
     });
 
     // Create KDS ticket immediately
-    const SOURCE_LABELS: Record<string, string> = {
-      online: "Online",
-    };
-
     await ctx.db.insert("kdsTickets", {
       tenantId: args.tenantId,
       orderId,
@@ -95,6 +101,7 @@ export const placeOrder = mutation({
         isBumped: false,
       })),
       customerName: args.customerName,
+      estimatedPickupTime: args.scheduledPickupTime,
       receivedAt: now,
     });
 
@@ -111,6 +118,19 @@ export const placeOrder = mutation({
       });
     }
 
-    return { orderId, orderNumber };
+    return { orderId, orderNumber, estimatedReadyAt };
   },
 });
+
+// Helper: get max prep time from menu items
+async function getMaxPrepTime(ctx: any, menuItemIds: any[]): Promise<number> {
+  let maxPrep = 0;
+  for (const id of menuItemIds) {
+    const item = await ctx.db.get(id);
+    if (item?.prepTimeMinutes && item.prepTimeMinutes > maxPrep) {
+      maxPrep = item.prepTimeMinutes;
+    }
+  }
+  // Default 20 min if no prep times set
+  return maxPrep || 20;
+}

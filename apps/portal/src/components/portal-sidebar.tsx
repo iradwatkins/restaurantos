@@ -10,6 +10,8 @@ import {
   BarChart3,
   Settings,
   Globe,
+  Utensils,
+  CalendarDays,
 } from 'lucide-react';
 import { cn } from '@restaurantos/ui';
 
@@ -21,6 +23,8 @@ const mainNav = [
 
 const manageNav = [
   { name: 'Menu', href: '/menu', icon: UtensilsCrossed },
+  { name: 'Events', href: '/events-mgmt', icon: CalendarDays },
+  { name: 'Catering', href: '/catering-mgmt', icon: Utensils },
   { name: 'Reports', href: '/reports', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
