@@ -41,6 +41,17 @@ export default function HomeContent() {
   const itemsWithImages = allItems.filter((i: any) => i.imageUrl);
   const featuredDishes = allItems.slice(0, 6);
 
+  // Find the best hero image — look for fried chicken first, then any dinner item
+  const heroImage = (() => {
+    const friedChicken = allItems.find((i: any) => i.imageUrl && i.name.toLowerCase().includes('fried chicken'));
+    if (friedChicken) return friedChicken.imageUrl;
+    const anyDinner = allItems.find((i: any) => i.imageUrl && (i.name.toLowerCase().includes('chicken') || i.name.toLowerCase().includes('chop')));
+    if (anyDinner) return anyDinner.imageUrl;
+    if (itemsWithImages.length > 0) return itemsWithImages[0].imageUrl;
+    // Fallback: a great soul food plate photo
+    return 'https://iheartrecipes.com/wp-content/uploads/2018/03/friedchicken6-1-scaled.jpg';
+  })();
+
   return (
     <div>
 
@@ -49,20 +60,18 @@ export default function HomeContent() {
           Inspired by His Place "Simply. Good. Food."
           ════════════════════════════════════════════════ */}
       <section className="relative min-h-[85vh] flex items-center overflow-hidden bg-[#1a1a1a]">
-        {/* Single large food background image */}
-        {itemsWithImages.length > 0 && (
-          <img
-            src={itemsWithImages[0].imageUrl}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#1a1a1a]/50 via-[#1a1a1a]/70 to-[#1a1a1a]/95" />
+        {/* Big soul food hero background — clearly visible */}
+        <img
+          src={heroImage}
+          alt="Soul food"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#1a1a1a]/80 via-[#1a1a1a]/50 to-transparent" />
 
-        <div className="relative w-full max-w-6xl mx-auto px-6 py-16 text-center">
+        <div className="relative w-full max-w-6xl mx-auto px-6 py-16 text-left">
           {/* Logo */}
           {tenant.logoUrl && (
-            <img src={tenant.logoUrl} alt={tenant.name} className="h-28 lg:h-36 mx-auto mb-8 drop-shadow-2xl" />
+            <img src={tenant.logoUrl} alt={tenant.name} className="h-20 lg:h-28 mb-6 drop-shadow-2xl" />
           )}
 
           {/* Tagline — big, bold, inspired by His Place "Simply. Good. Food." */}
@@ -74,13 +83,13 @@ export default function HomeContent() {
           </h2>
 
           {tenant.tagline && (
-            <p className="text-white/60 text-lg max-w-lg mx-auto mb-10">
+            <p className="text-white/70 text-lg max-w-lg mb-10">
               {tenant.tagline}
             </p>
           )}
 
           {/* CTAs */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+          <div className="flex flex-col sm:flex-row gap-4 mb-12">
             <Link href="/order">
               <button className="w-full sm:w-auto bg-[#d32f2f] hover:bg-[#b71c1c] text-white font-bold text-lg px-10 py-4 rounded-full tracking-wide transition-colors shadow-lg shadow-red-900/30">
                 ORDER NOW
@@ -94,7 +103,7 @@ export default function HomeContent() {
           </div>
 
           {/* Quick info pills */}
-          <div className="flex items-center justify-center gap-4 flex-wrap text-white/50 text-sm">
+          <div className="flex items-center gap-4 flex-wrap text-white/50 text-sm">
             {todayHours && !todayHours.isClosed && (
               <span className="flex items-center gap-1.5 bg-white/5 px-4 py-2 rounded-full">
                 <Clock className="h-3.5 w-3.5" />
@@ -368,11 +377,7 @@ export default function HomeContent() {
    Food Card Component — large image with overlay text
    ════════════════════════════════════════════════ */
 function FoodCard({ item, large }: { item: any; large?: boolean }) {
-  const storageUrl = useQuery(
-    api.menu.queries.getImageUrl,
-    item.imageStorageId ? { storageId: item.imageStorageId } : 'skip'
-  );
-  const imgSrc = storageUrl || item.imageUrl;
+  const imgSrc = item.imageUrl;
 
   return (
     <div className={`relative rounded-2xl overflow-hidden group cursor-pointer ${large ? 'row-span-2 col-span-2 lg:col-span-1 lg:row-span-2' : ''}`}>

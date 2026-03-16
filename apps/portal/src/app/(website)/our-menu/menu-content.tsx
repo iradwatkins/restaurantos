@@ -63,13 +63,7 @@ export default function MenuShowcasePage() {
 }
 
 function MenuShowcaseItem({ item }: { item: any }) {
-  const storageUrl = useQuery(
-    api.menu.queries.getImageUrl,
-    item.imageStorageId ? { storageId: item.imageStorageId } : 'skip'
-  );
-
-  // Use Convex storage image first, fall back to imageUrl field
-  const displayImage = storageUrl || item.imageUrl || null;
+  const displayImage = item.imageUrl || null;
   const itemType = item.type ?? 'food';
   const isAlcohol = ALCOHOL_TYPES.includes(itemType);
 
