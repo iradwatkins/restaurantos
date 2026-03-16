@@ -16,12 +16,12 @@ import { CalendarDays, Clock, Users, Utensils, Star } from 'lucide-react';
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const SHORT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-// Images for buffet pricing tiers
+// Soul food images for buffet pricing tier backgrounds
 const TIER_IMAGES: Record<string, string> = {
-  'Adults': 'https://images.unsplash.com/photo-1529543544282-ea57407bc2e3?w=600&h=400&fit=crop',
-  'Seniors': 'https://images.unsplash.com/photo-1447078806655-40579c2520d6?w=600&h=400&fit=crop',
-  'Kids 2-12': 'https://images.unsplash.com/photo-1484723091739-30a097e8f929?w=600&h=400&fit=crop',
-  'default': 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&h=400&fit=crop',
+  'Adults': 'https://iheartrecipes.com/wp-content/uploads/2018/03/friedchicken6-1-scaled.jpg',
+  'Seniors': 'https://www.munatycooking.com/wp-content/uploads/2023/06/Smothered-chicken-feature-image-2023-1-e1747245495976.jpg',
+  'Kids 2-12': 'https://images.pexels.com/photos/2092897/pexels-photo-2092897.jpeg?auto=compress&cs=tinysrgb&w=800',
+  'default': 'https://iheartrecipes.com/wp-content/uploads/2017/03/friedchicken5-1024x683.jpg',
 };
 
 export default function EventsContent() {
@@ -83,7 +83,7 @@ export default function EventsContent() {
                   <p className="text-muted-foreground mb-6">{event.description}</p>
                 )}
 
-                {/* Pricing Tiers with images */}
+                {/* Pricing Tiers — soul food images with overlay pricing */}
                 {event.pricingTiers && event.pricingTiers.length > 0 && (
                   <div className="grid gap-4 sm:grid-cols-3">
                     {event.pricingTiers.map((tier: any) => {
@@ -91,18 +91,17 @@ export default function EventsContent() {
                       return (
                         <div
                           key={tier._id}
-                          className="rounded-xl border-2 border-primary/10 overflow-hidden hover:border-primary/30 transition-colors bg-white"
+                          className="relative rounded-xl overflow-hidden h-56 group"
                         >
-                          <div className="h-40 overflow-hidden">
-                            <img
-                              src={tierImage}
-                              alt={tier.tierName}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div className="p-5 text-center">
-                            <p className="font-semibold text-lg">{tier.tierName}</p>
-                            <p className="text-3xl font-bold text-primary mt-1">
+                          <img
+                            src={tierImage}
+                            alt={tier.tierName}
+                            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                          <div className="absolute bottom-0 left-0 right-0 p-5 text-center text-white">
+                            <p className="font-bold text-lg">{tier.tierName}</p>
+                            <p className="text-4xl font-black mt-1" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
                               ${(tier.price / 100).toFixed(2)}
                             </p>
                           </div>
