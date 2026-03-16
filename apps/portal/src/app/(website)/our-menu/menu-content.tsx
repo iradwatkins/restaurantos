@@ -63,19 +63,21 @@ export default function MenuShowcasePage() {
 }
 
 function MenuShowcaseItem({ item }: { item: any }) {
-  const imageUrl = useQuery(
+  const storageUrl = useQuery(
     api.menu.queries.getImageUrl,
     item.imageStorageId ? { storageId: item.imageStorageId } : 'skip'
   );
 
+  // Use Convex storage image first, fall back to imageUrl field
+  const displayImage = storageUrl || item.imageUrl || null;
   const itemType = item.type ?? 'food';
   const isAlcohol = ALCOHOL_TYPES.includes(itemType);
 
   return (
     <div className="flex gap-4 p-4 rounded-lg border hover:bg-accent/30 transition-colors">
-      {imageUrl && (
+      {displayImage && (
         <img
-          src={imageUrl}
+          src={displayImage}
           alt={item.name}
           className="h-20 w-20 rounded-md object-cover flex-shrink-0"
         />

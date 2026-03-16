@@ -562,8 +562,10 @@ function MenuItemCard({
   return (
     <>
       <Card className="overflow-hidden">
-        {item.imageStorageId && (
-          <OrderItemImage storageId={item.imageStorageId} name={item.name} />
+        {(item.imageStorageId || item.imageUrl) && (
+          item.imageStorageId
+            ? <OrderItemImage storageId={item.imageStorageId} name={item.name} />
+            : <img src={item.imageUrl} alt={item.name} className="h-32 w-full object-cover" />
         )}
         <CardContent className="p-4">
           <div className="flex justify-between items-start mb-2">
