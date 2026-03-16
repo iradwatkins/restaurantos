@@ -1,8 +1,97 @@
 # RestaurantOS — Project Handoff Document
 
 **Date:** March 16, 2026
-**Status:** MVP Complete + Restaurant Buildout (Phases 1-5)
+**Status:** MVP Complete + Restaurant Buildout (Phases 1-5) + D&K Soul Food Prototype + Events System
 **Repo:** https://github.com/iradwatkins/restaurantos
+
+### Live URLs
+
+| App | URL |
+|-----|-----|
+| D&K Soul Food (public website) | https://dk-soul-food.restaurants.irawatkins.com/ |
+| D&K Online Ordering | https://dk-soul-food.restaurants.irawatkins.com/order |
+| D&K Events & Specials | https://dk-soul-food.restaurants.irawatkins.com/events |
+| D&K Portal Login | https://dk-soul-food.restaurants.irawatkins.com/login |
+| Maria's Kitchen (public) | https://marias-kitchen.restaurants.irawatkins.com/ |
+| Admin Dashboard | https://admin.restaurants.irawatkins.com/login |
+
+### Credentials
+
+| Tenant | Email | Password |
+|--------|-------|----------|
+| D&K Soul Food (owner) | dk@dksoulfood.com | dksoul123!@# |
+| Maria's Kitchen (owner) | maria@mariaskitchen.com | owner123!@# |
+| Admin (super_admin) | admin@restaurantos.com | admin123!@# |
+
+---
+
+## What Was Built (Phase 3 — D&K Soul Food Prototype + Events)
+
+### D&K Soul Food Tenant
+- **64 menu items** across 10 categories: Soul Rolls, Soul Food Dinners (17 items, all include 2 sides + cornbread), Gourmet Salads, Wraps, Soups, Debra's Desserts, Smoothies, A La Carte Proteins, Sides, Drinks
+- All menu items have food images from soul food recipe blogs (iheartrecipes.com, grandbaby-cakes.com, thesoulfoodpot.com, munatycooking.com) stored as `imageUrl`
+- **Business info**: 3669 Broadway, Gary, IN 46409, (219) 487-5306, 7% Indiana tax rate
+- **Hours**: Mon Closed, Tue-Fri 11am-8pm, Sat-Sun 11am-6pm
+- **Theme**: Dark nav (#191A19), green buttons (#348726), warm cream accents, serif headings
+- **Logo**: D&K SVG logo from dksoulfood.com
+
+### Events System (New Feature)
+- **3 new Convex tables**: `events`, `eventPricingTiers`, `dailySpecials`
+- **Sunday All You Can Eat Buffet**: recurring weekly event with 3 pricing tiers (Adults $26.99, Seniors $19.99, Kids 2-12 $14.99)
+- **6 daily specials**: Tuesday (Teriyaki Bowl), Wednesday (Senior Discount Day), Thursday (Meatloaf Plate), Friday (Spaghetti + Wings), Saturday/Sunday (Stuffed Feast)
+- **Events page** (`/events`): featured event card with pricing tiers + daily specials grid with "Today" highlighted
+- **Events management** (`/events-mgmt`): portal page for restaurant owners to manage events and daily specials
+- **Homepage integration**: Today's Special banner + Sunday Buffet promo section with pricing
+
+### Felicity Design Redesign
+- Homepage redesigned based on hisplaceeatery.com, soulechicago.com, loloschickenandwaffles.com
+- **Hero**: Full-width fried chicken photo background, left-aligned text on dark gradient, serif "Soul Food. Made Fresh Daily." in white + gold
+- **Scalloped divider** between hero and content (His Place pattern)
+- **Delivery bar**: "Yes We Deliver" with DoorDash (red) / Uber Eats (green) badges
+- **Featured Dishes**: 6-item food photo grid with dark overlay showing name + price
+- **Sunday Buffet**: Bold yellow (#f9c80e) section with pricing tier cards showing people images
+- **Today's Special**: Dark background, red badge, items with gold prices
+- **Food Gallery**: Edge-to-edge 8-column image strip
+- **About & Hours**: Warm cream (#f5f0e8) split layout, today highlighted in green
+- **CTA Footer**: Solid red (#d32f2f) with white buttons
+
+### Tenant Resolution Fix
+- Created `useTenant()` hook (`apps/portal/src/hooks/use-tenant.ts`) that reads subdomain from browser hostname
+- Replaced `tenants.queries.list` + `tenants?.[0]` pattern across all 16 portal pages
+- Each subdomain now correctly resolves to its own tenant data
+
+### SSR Fix
+- All pages wrapped with `next/dynamic({ ssr: false })` to prevent Convex `useQuery` SSR errors
+- Content files separated from page files (e.g., `menu-content.tsx` + `page.tsx`)
+- `.env` symlinked from repo root to `apps/portal/` and `apps/admin/`
+
+### Production Deployment
+- Portal and Admin Docker images rebuilt and deployed on Coolify server (72.60.28.175)
+- Fixed Traefik entrypoints: uses `https` (not `websecure`) matching Coolify's Traefik v3 config
+- Fixed `HOSTNAME=0.0.0.0` env var for Next.js standalone to listen on all interfaces
+- Added `dk-soul-food.restaurants.irawatkins.com` to portal Traefik routing rules
+- DNS: `*.restaurants.irawatkins.com` wildcard already points to 72.60.28.175
+
+### Convex Schema (21 tables total, +3 new)
+| New Table | Purpose |
+|-----------|---------|
+| events | Recurring/one-time restaurant events (buffets, specials, holidays) |
+| eventPricingTiers | Multi-tier pricing per event (Adults/Seniors/Kids) |
+| dailySpecials | Day-of-week specials with items and prices |
+
+### New Convex Modules
+| Module | Functions |
+|--------|-----------|
+| events/queries | getEvents, getEventWithPricing, getEventsWithPricing |
+| events/mutations | createEvent, updateEvent, deleteEvent, createPricingTier, updatePricingTier, deletePricingTier |
+| dailySpecials/queries | getAll, getToday, getByDay |
+| dailySpecials/mutations | upsert, toggleActive, deleteSpecial |
+| public/queries (added) | getPublicEvents, getTodaySpecial, getDailySpecials, getCateringMenu |
+
+### Known Issues / TODO
+- **Buffet tier images**: Currently using placeholder images (Black couple from Pexels, Black women cooking, Black mom+child). Need to be replaced with specific images of Black adults/seniors/kids eating at a buffet. Owner can find images on nappy.co and provide URLs.
+- **Convex file storage URLs**: Return relative paths (`/api/storage/...`) that don't resolve in production. All menu item images use `imageUrl` (external URLs) instead. Need to fix Convex storage URL resolution or proxy through Next.js.
+- **Today's Special on homepage**: Shows when daily special exists for current day. Needs testing across all days.
 
 ---
 
