@@ -1,19 +1,8 @@
-FROM node:20-alpine AS base
+FROM node:20-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
-
-FROM base AS deps
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./
-COPY apps/admin/package.json ./apps/admin/
-COPY packages/backend/package.json ./packages/backend/
-COPY packages/config/package.json ./packages/config/
-COPY packages/ui/package.json ./packages/ui/
-COPY packages/webhooks/package.json ./packages/webhooks/
-RUN pnpm install --frozen-lockfile
-
-FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN pnpm install --frozen-lockfile
 RUN pnpm turbo build --filter=@restaurantos/admin
 
 FROM node:20-alpine AS runner
@@ -22,7 +11,6 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 COPY --from=builder /app/apps/admin/.next/standalone ./
 COPY --from=builder /app/apps/admin/.next/static ./apps/admin/.next/static
-COPY --from=builder /app/apps/admin/public ./apps/admin/public 2>/dev/null || true
 USER nextjs
 EXPOSE 3005
 ENV PORT=3005
