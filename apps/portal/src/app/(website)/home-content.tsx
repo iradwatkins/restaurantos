@@ -49,15 +49,15 @@ export default function HomeContent() {
           Inspired by His Place "Simply. Good. Food."
           ════════════════════════════════════════════════ */}
       <section className="relative min-h-[85vh] flex items-center overflow-hidden bg-[#1a1a1a]">
-        {/* Background food collage */}
-        <div className="absolute inset-0 grid grid-cols-3 opacity-30">
-          {itemsWithImages.slice(0, 3).map((item: any, idx: number) => (
-            <div key={idx} className="overflow-hidden">
-              <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
-            </div>
-          ))}
-        </div>
-        <div className="absolute inset-0 bg-gradient-to-b from-[#1a1a1a]/60 via-[#1a1a1a]/80 to-[#1a1a1a]" />
+        {/* Single large food background image */}
+        {itemsWithImages.length > 0 && (
+          <img
+            src={itemsWithImages[0].imageUrl}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#1a1a1a]/50 via-[#1a1a1a]/70 to-[#1a1a1a]/95" />
 
         <div className="relative w-full max-w-6xl mx-auto px-6 py-16 text-center">
           {/* Logo */}
