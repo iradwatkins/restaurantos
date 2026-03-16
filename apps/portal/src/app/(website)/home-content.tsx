@@ -66,7 +66,7 @@ export default function HomeContent() {
           alt="Soul food"
           className="absolute inset-0 w-full h-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#1a1a1a]/80 via-[#1a1a1a]/50 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#1a1a1a]/70 via-[#1a1a1a]/30 to-transparent" />
 
         <div className="relative w-full max-w-6xl mx-auto px-6 py-16 text-left">
           {/* Logo */}
