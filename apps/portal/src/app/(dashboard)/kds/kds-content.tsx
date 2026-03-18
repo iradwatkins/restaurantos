@@ -184,6 +184,7 @@ export default function KDSPage() {
                 <button
                   key={idx}
                   onClick={() => handleBumpItem(ticket._id, idx)}
+                  aria-label={`Mark ${item.name} as prepared`}
                   className={`w-full text-left p-2 rounded transition-colors ${
                     item.isBumped
                       ? 'bg-green-50 line-through text-muted-foreground'

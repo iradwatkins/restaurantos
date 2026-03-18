@@ -210,6 +210,14 @@ export const updateSettings = mutation({
       })
     ),
     googleMapsEmbedUrl: v.optional(v.string()),
+    // Website content (configurable per-tenant)
+    heroHeading: v.optional(v.string()),
+    heroSubheading: v.optional(v.string()),
+    deliveryMessage: v.optional(v.string()),
+    deliveryPartners: v.optional(
+      v.array(v.object({ name: v.string(), color: v.string() }))
+    ),
+    footerTagline: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;

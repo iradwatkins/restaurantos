@@ -199,6 +199,31 @@ export default function OnlineOrderPage() {
   async function submitOrder(stripePaymentIntentId: string | undefined) {
     setSubmitting(true);
 
+    // Validate required fields
+    const customerName = (document.getElementById('name') as HTMLInputElement)?.value?.trim();
+    const customerPhone = (document.getElementById('phone') as HTMLInputElement)?.value?.trim();
+
+    if (!customerName) {
+      toast.error('Please enter your name');
+      setSubmitting(false);
+      return;
+    }
+
+    const phoneDigits = customerPhone.replace(/\D/g, '');
+    if (phoneDigits.length < 10) {
+      toast.error('Please enter a valid 10-digit phone number');
+      setSubmitting(false);
+      return;
+    }
+
+    // Enforce minimum order amount
+    const minimumCents = onlineSettings?.minimumOrderCents ?? 0;
+    if (minimumCents > 0 && subtotal < minimumCents) {
+      toast.error(`Minimum order amount is $${(minimumCents / 100).toFixed(2)}`);
+      setSubmitting(false);
+      return;
+    }
+
     // Parse scheduled time
     let scheduledPickupTime: number | undefined;
     if (scheduledTime) {
@@ -220,10 +245,10 @@ export default function OnlineOrderPage() {
     try {
       const result = await placeOrder({
         tenantId,
-        customerName: (document.getElementById('name') as HTMLInputElement).value,
-        customerPhone: (document.getElementById('phone') as HTMLInputElement).value,
+        customerName,
+        customerPhone,
         customerEmail:
-          (document.getElementById('email') as HTMLInputElement).value || undefined,
+          (document.getElementById('email') as HTMLInputElement)?.value?.trim() || undefined,
         orderType: 'pickup',
         specialInstructions:
           (document.getElementById('notes') as HTMLInputElement).value || undefined,
@@ -366,6 +391,7 @@ export default function OnlineOrderPage() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => updateQuantity(idx, -1)}
+                        aria-label={`Decrease quantity of ${item.name}`}
                         className="h-7 w-7 rounded border flex items-center justify-center hover:bg-accent"
                       >
                         <Minus className="h-3 w-3" />
@@ -373,6 +399,7 @@ export default function OnlineOrderPage() {
                       <span className="w-6 text-center font-medium">{item.quantity}</span>
                       <button
                         onClick={() => updateQuantity(idx, 1)}
+                        aria-label={`Increase quantity of ${item.name}`}
                         className="h-7 w-7 rounded border flex items-center justify-center hover:bg-accent"
                       >
                         <Plus className="h-3 w-3" />

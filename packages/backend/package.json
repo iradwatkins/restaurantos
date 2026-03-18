@@ -17,7 +17,9 @@
   "scripts": {
     "dev": "convex dev",
     "deploy": "convex deploy",
-    "codegen": "convex codegen"
+    "codegen": "convex codegen",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

@@ -27,9 +27,10 @@ function getKeyPair(): { privateKey: KeyObject; publicKey: KeyObject } {
   }
 
   if (!cachedPrivateKey || !cachedPublicKey) {
-    if (process.env.NODE_ENV === 'production') {
-      console.error('[JWKS] CRITICAL: JWT_PRIVATE_KEY/JWT_PUBLIC_KEY not set. Using ephemeral keys.');
-    }
+    console.warn(
+      '[JWKS] WARNING: JWT_PRIVATE_KEY/JWT_PUBLIC_KEY not set. Using ephemeral keys that reset on restart.\n' +
+      '  Run `scripts/generate-keypair.sh` and add the values to your .env file.'
+    );
 
     const { privateKey, publicKey } = generateKeyPairSync('rsa', {
       modulusLength: 2048,

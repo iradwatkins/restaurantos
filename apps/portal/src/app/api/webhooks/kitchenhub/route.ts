@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { api } from '@restaurantos/backend';
 import { convexClient } from '@/lib/auth/convex-client';
 
@@ -22,12 +23,31 @@ import { convexClient } from '@/lib/auth/convex-client';
  *   total: number (cents),
  * }
  */
+
+function verifyWebhookSignature(rawBody: string, signature: string, secret: string): boolean {
+  const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
+  const sig = signature.replace(/^sha256=/, '');
+  if (expected.length !== sig.length) return false;
+  return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(sig, 'hex'));
+}
+
 export async function POST(request: Request) {
   try {
-    // TODO: Verify KitchenHub webhook signature
-    // const signature = request.headers.get('x-kitchenhub-signature');
+    const rawBody = await request.text();
 
-    const payload = await request.json();
+    // Verify KitchenHub webhook signature
+    const webhookSecret = process.env.KITCHENHUB_WEBHOOK_SECRET;
+    if (webhookSecret) {
+      const signature = request.headers.get('x-kitchenhub-signature');
+      if (!signature) {
+        return NextResponse.json({ error: 'Missing webhook signature' }, { status: 401 });
+      }
+      if (!verifyWebhookSignature(rawBody, signature, webhookSecret)) {
+        return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 });
+      }
+    }
+
+    const payload = JSON.parse(rawBody);
 
     // Find tenant by KitchenHub store ID
     // For now, use subdomain from the URL or a header

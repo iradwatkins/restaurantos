@@ -258,6 +258,7 @@ export default function CateringPage() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => updateQuantity(item.cateringMenuItemId, -1)}
+                          aria-label={`Decrease quantity of ${item.name}`}
                           className="h-6 w-6 rounded border flex items-center justify-center"
                         >
                           <Minus className="h-3 w-3" />
@@ -265,6 +266,7 @@ export default function CateringPage() {
                         <span className="w-4 text-center">{item.quantity}</span>
                         <button
                           onClick={() => updateQuantity(item.cateringMenuItemId, 1)}
+                          aria-label={`Increase quantity of ${item.name}`}
                           className="h-6 w-6 rounded border flex items-center justify-center"
                         >
                           <Plus className="h-3 w-3" />

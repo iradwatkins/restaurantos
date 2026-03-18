@@ -782,6 +782,13 @@ function BrandingTab({ tenant, onSave }: { tenant: any; onSave: any }) {
 }
 
 function WebsiteTab({ tenant, onSave }: { tenant: any; onSave: any }) {
+  const [partners, setPartners] = useState<{ name: string; color: string }[]>(
+    tenant.deliveryPartners ?? [
+      { name: 'DoorDash', color: '#FF3008' },
+      { name: 'Uber Eats', color: '#06C167' },
+    ]
+  );
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -796,6 +803,11 @@ function WebsiteTab({ tenant, onSave }: { tenant: any; onSave: any }) {
           twitter: (form.get('twitter') as string) || undefined,
           yelp: (form.get('yelp') as string) || undefined,
         },
+        heroHeading: (form.get('heroHeading') as string) || undefined,
+        heroSubheading: (form.get('heroSubheading') as string) || undefined,
+        deliveryMessage: (form.get('deliveryMessage') as string) || undefined,
+        deliveryPartners: partners.filter((p) => p.name.trim()),
+        footerTagline: (form.get('footerTagline') as string) || undefined,
       });
       toast.success('Website settings updated');
     } catch (err: any) {
@@ -823,6 +835,94 @@ function WebsiteTab({ tenant, onSave }: { tenant: any; onSave: any }) {
             />
             <span className="font-medium">Enable Public Website</span>
           </label>
+
+          <Separator />
+
+          <h3 className="font-semibold">Homepage Content</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="heroHeading">Hero Heading</Label>
+              <Input
+                id="heroHeading"
+                name="heroHeading"
+                defaultValue={tenant.heroHeading ?? ''}
+                placeholder="Soul Food."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="heroSubheading">Hero Subheading</Label>
+              <Input
+                id="heroSubheading"
+                name="heroSubheading"
+                defaultValue={tenant.heroSubheading ?? ''}
+                placeholder="Made Fresh Daily."
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="deliveryMessage">Delivery Message</Label>
+              <Input
+                id="deliveryMessage"
+                name="deliveryMessage"
+                defaultValue={tenant.deliveryMessage ?? ''}
+                placeholder="Yes We Deliver"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="footerTagline">Footer Tagline</Label>
+              <Input
+                id="footerTagline"
+                name="footerTagline"
+                defaultValue={tenant.footerTagline ?? ''}
+                placeholder="Fresh food, great service."
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Delivery Partners</Label>
+            <div className="space-y-2">
+              {partners.map((p, idx) => (
+                <div key={idx} className="flex gap-2 items-center">
+                  <Input
+                    value={p.name}
+                    onChange={(e) => {
+                      const updated = [...partners];
+                      updated[idx] = { ...updated[idx], name: e.target.value };
+                      setPartners(updated);
+                    }}
+                    placeholder="Partner name"
+                    className="flex-1"
+                  />
+                  <Input
+                    type="color"
+                    value={p.color}
+                    onChange={(e) => {
+                      const updated = [...partners];
+                      updated[idx] = { ...updated[idx], color: e.target.value };
+                      setPartners(updated);
+                    }}
+                    className="w-14 h-10 p-1 cursor-pointer"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPartners(partners.filter((_, i) => i !== idx))}
+                    className="text-destructive text-sm hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setPartners([...partners, { name: '', color: '#000000' }])}
+                className="text-sm text-primary hover:underline"
+              >
+                + Add Partner
+              </button>
+            </div>
+          </div>
 
           <Separator />
 
