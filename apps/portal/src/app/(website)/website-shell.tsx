@@ -10,6 +10,9 @@ export function WebsiteShell({
   phone,
   email,
   address,
+  primaryColor,
+  socialLinks,
+  footerTagline,
   children,
 }: {
   tenantName: string;
@@ -18,6 +21,9 @@ export function WebsiteShell({
   phone?: string;
   email?: string;
   address?: any;
+  primaryColor?: string;
+  socialLinks?: { facebook?: string; instagram?: string; twitter?: string; yelp?: string } | null;
+  footerTagline?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -27,6 +33,7 @@ export function WebsiteShell({
         logoUrl={logoUrl}
         hasCatering={hasCatering}
         phone={phone}
+        primaryColor={primaryColor}
       />
       <main className="flex-1">{children}</main>
       <WebsiteFooter
@@ -34,6 +41,8 @@ export function WebsiteShell({
         phone={phone}
         email={email}
         address={address}
+        socialLinks={socialLinks}
+        footerTagline={footerTagline}
       />
     </div>
   );

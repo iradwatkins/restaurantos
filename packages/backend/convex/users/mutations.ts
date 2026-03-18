@@ -1,11 +1,12 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
+import bcrypt from "bcryptjs";
 
 export const create = mutation({
   args: {
     tenantId: v.id("tenants"),
     email: v.string(),
-    passwordHash: v.string(),
+    password: v.string(),
     name: v.optional(v.string()),
     role: v.union(
       v.literal("owner"),
@@ -27,8 +28,12 @@ export const create = mutation({
       throw new Error("User with this email already exists for this tenant");
     }
 
+    const { password, ...rest } = args;
+    const passwordHash = await bcrypt.hash(password, 12);
+
     return await ctx.db.insert("users", {
-      ...args,
+      ...rest,
+      passwordHash,
       status: "active",
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -67,11 +72,12 @@ export const update = mutation({
 export const resetPassword = mutation({
   args: {
     id: v.id("users"),
-    newPasswordHash: v.string(),
+    newPassword: v.string(),
   },
   handler: async (ctx, args) => {
+    const passwordHash = await bcrypt.hash(args.newPassword, 12);
     await ctx.db.patch(args.id, {
-      passwordHash: args.newPasswordHash,
+      passwordHash,
       updatedAt: Date.now(),
     });
   },

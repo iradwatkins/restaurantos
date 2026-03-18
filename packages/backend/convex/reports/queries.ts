@@ -57,21 +57,39 @@ export const getDailySales = query({
 });
 
 export const getTopItems = query({
-  args: { tenantId: v.id("tenants") },
+  args: {
+    tenantId: v.id("tenants"),
+    limit: v.optional(v.number()),
+    startDate: v.optional(v.number()), // epoch ms
+    endDate: v.optional(v.number()), // epoch ms
+  },
   handler: async (ctx, args) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const maxItems = args.limit ?? 10;
+
+    let fromTime: number;
+    if (args.startDate) {
+      fromTime = args.startDate;
+    } else {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      fromTime = today.getTime();
+    }
 
     const orders = await ctx.db
       .query("orders")
       .withIndex("by_tenantId_createdAt", (q) =>
-        q.eq("tenantId", args.tenantId).gte("createdAt", today.getTime())
+        q.eq("tenantId", args.tenantId).gte("createdAt", fromTime)
       )
       .collect();
 
+    // Filter by end date if provided
+    const filtered = args.endDate
+      ? orders.filter((o) => o.createdAt <= args.endDate!)
+      : orders;
+
     // Count item sales
     const itemCounts: Record<string, { name: string; count: number; revenue: number }> = {};
-    for (const order of orders) {
+    for (const order of filtered) {
       for (const item of order.items) {
         const key = item.name;
         if (!itemCounts[key]) {
@@ -84,6 +102,6 @@ export const getTopItems = query({
 
     return Object.values(itemCounts)
       .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
+      .slice(0, maxItems);
   },
 });

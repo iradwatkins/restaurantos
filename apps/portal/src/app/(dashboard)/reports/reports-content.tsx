@@ -45,7 +45,7 @@ export default function ReportsPage() {
   );
   const topItems = useQuery(
     api.reports.queries.getTopItems,
-    tenantId ? { tenantId } : 'skip'
+    tenantId ? { tenantId, limit: 10 } : 'skip'
   );
 
   if (!tenantId) {
@@ -172,7 +172,7 @@ export default function ReportsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Top 5 Items Today</CardTitle>
+            <CardTitle className="text-base">Top Items Today</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>

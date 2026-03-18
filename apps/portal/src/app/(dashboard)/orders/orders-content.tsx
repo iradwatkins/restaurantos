@@ -471,8 +471,7 @@ export default function OrdersPage() {
                   <Button
                     className="h-16"
                     onClick={() => {
-                      toast.info('Stripe terminal integration coming in Sprint 2.5');
-                      // TODO: Stripe payment intent
+                      toast.info('Card payments require Stripe Terminal setup. Configure in Settings > Online Ordering.');
                     }}
                   >
                     <CreditCard className="mr-2 h-5 w-5" />

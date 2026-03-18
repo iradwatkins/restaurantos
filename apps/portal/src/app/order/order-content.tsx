@@ -20,7 +20,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@restaurantos/ui';
-import { ShoppingCart, Plus, Minus, Check, Star, Clock } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Check, Star, Clock, Wine } from 'lucide-react';
 import { toast } from 'sonner';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
@@ -44,7 +44,7 @@ export default function OnlineOrderPage() {
 
   const TAX_RATE = tenant?.taxRate ?? 0.0875;
 
-  const menu = useQuery(
+  const menuData = useQuery(
     api.public.queries.getMenu,
     tenantId ? { tenantId } : 'skip'
   );
@@ -65,11 +65,14 @@ export default function OnlineOrderPage() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
 
-  if (!tenantId || !menu) {
+  if (!tenantId || !menuData) {
     return (
       <div className="text-center py-20 text-muted-foreground">Loading menu...</div>
     );
   }
+
+  const menu = menuData.categories;
+  const hasAlcoholItems = menuData.hasAlcoholItems;
 
   const onlineSettings = tenant?.onlineOrderingSettings;
   const pickupSlot = onlineSettings?.pickupTimeSlotMinutes ?? 15;
@@ -206,6 +209,12 @@ export default function OnlineOrderPage() {
       if (period === 'AM' && h === 12) h = 0;
       today.setHours(h, m, 0, 0);
       scheduledPickupTime = today.getTime();
+
+      if (scheduledPickupTime < Date.now()) {
+        toast.error('Scheduled pickup time must be in the future');
+        setSubmitting(false);
+        return;
+      }
     }
 
     try {
@@ -288,6 +297,12 @@ export default function OnlineOrderPage() {
     <div className="grid gap-6 lg:grid-cols-3">
       {/* Menu */}
       <div className="lg:col-span-2 space-y-6">
+        {hasAlcoholItems && (
+          <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-sm px-4 py-3 rounded-lg">
+            <Wine className="h-4 w-4 flex-shrink-0" />
+            <span>Beer, wine &amp; spirits are available for dine-in only and cannot be ordered online.</span>
+          </div>
+        )}
         {menu.map((category) => (
           <div key={category._id}>
             <h2 className="text-xl font-bold mb-3">{category.name}</h2>

@@ -3,8 +3,7 @@
 import { useQuery } from 'convex/react';
 import { api } from '@restaurantos/backend';
 import { useTenant } from '@/hooks/use-tenant';
-import { Button, Badge } from '@restaurantos/ui';
-import { Clock, MapPin, Phone, ArrowRight, Star, CalendarDays, Truck, Users, ChevronRight, UtensilsCrossed } from 'lucide-react';
+import { Clock, MapPin, Phone, ArrowRight, Star, Truck } from 'lucide-react';
 import Link from 'next/link';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -27,6 +26,11 @@ export default function HomeContent() {
     tenantId ? { tenantId } : 'skip'
   );
 
+  const websiteData = useQuery(
+    api.public.queries.getTenantWebsite,
+    tenant?.subdomain ? { subdomain: tenant.subdomain } : 'skip'
+  );
+
   if (!tenant) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center bg-[#1a1a1a]">
@@ -34,6 +38,19 @@ export default function HomeContent() {
       </div>
     );
   }
+
+  // Tenant-configurable colors with fallbacks
+  const primaryColor = tenant.primaryColor || '#d32f2f';
+  const accentColor = tenant.accentColor || '#f9c80e';
+
+  // Tenant-configurable content with fallbacks
+  const heroHeading = websiteData?.heroHeading || 'Soul Food.';
+  const heroSubheading = websiteData?.heroSubheading || 'Made Fresh Daily.';
+  const deliveryMessage = websiteData?.deliveryMessage || 'Yes We Deliver';
+  const deliveryPartners = websiteData?.deliveryPartners || [
+    { name: 'DoorDash', color: '#FF3008' },
+    { name: 'Uber Eats', color: '#06C167' },
+  ];
 
   const today = new Date().getDay();
   const todayHours = tenant.businessHours?.find((h: any) => h.day === today);
@@ -48,7 +65,6 @@ export default function HomeContent() {
     const anyDinner = allItems.find((i: any) => i.imageUrl && (i.name.toLowerCase().includes('chicken') || i.name.toLowerCase().includes('chop')));
     if (anyDinner) return anyDinner.imageUrl;
     if (itemsWithImages.length > 0) return itemsWithImages[0].imageUrl;
-    // Fallback: a great soul food plate photo
     return 'https://iheartrecipes.com/wp-content/uploads/2018/03/friedchicken6-1-scaled.jpg';
   })();
 
@@ -57,29 +73,25 @@ export default function HomeContent() {
 
       {/* ════════════════════════════════════════════════
           HERO — Full-screen food image with bold tagline
-          Inspired by His Place "Simply. Good. Food."
           ════════════════════════════════════════════════ */}
       <section className="relative min-h-[85vh] flex items-center overflow-hidden bg-[#1a1a1a]">
-        {/* Big soul food hero background — clearly visible */}
         <img
           src={heroImage}
-          alt="Soul food"
+          alt={`${tenant.name} — fresh soul food dishes`}
           className="absolute inset-0 w-full h-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-[#1a1a1a]/70 via-[#1a1a1a]/30 to-transparent" />
 
         <div className="relative w-full max-w-6xl mx-auto px-6 py-16 text-left">
-          {/* Logo */}
           {tenant.logoUrl && (
-            <img src={tenant.logoUrl} alt={tenant.name} className="h-20 lg:h-28 mb-6 drop-shadow-2xl" />
+            <img src={tenant.logoUrl} alt={`${tenant.name} logo`} className="h-20 lg:h-28 mb-6 drop-shadow-2xl" />
           )}
 
-          {/* Tagline — big, bold, inspired by His Place "Simply. Good. Food." */}
           <h1 className="text-5xl sm:text-6xl lg:text-8xl font-black text-white tracking-tight leading-none mb-4" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
-            Soul Food.
+            {heroHeading}
           </h1>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-light text-[#f9c80e] tracking-wide mb-8" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
-            Made Fresh Daily.
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-light tracking-wide mb-8" style={{ fontFamily: '"Playfair Display", Georgia, serif', color: accentColor }}>
+            {heroSubheading}
           </h2>
 
           {tenant.tagline && (
@@ -91,7 +103,10 @@ export default function HomeContent() {
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-4 mb-12">
             <Link href="/order">
-              <button className="w-full sm:w-auto bg-[#d32f2f] hover:bg-[#b71c1c] text-white font-bold text-lg px-10 py-4 rounded-full tracking-wide transition-colors shadow-lg shadow-red-900/30">
+              <button
+                className="w-full sm:w-auto text-white font-bold text-lg px-10 py-4 rounded-full tracking-wide transition-colors shadow-lg"
+                style={{ backgroundColor: primaryColor }}
+              >
                 ORDER NOW
               </button>
             </Link>
@@ -118,12 +133,12 @@ export default function HomeContent() {
             )}
             <span className="flex items-center gap-1.5 bg-white/5 px-4 py-2 rounded-full">
               <Truck className="h-3.5 w-3.5" />
-              Delivery Available
+              {deliveryMessage}
             </span>
           </div>
         </div>
 
-        {/* Scalloped divider at bottom — inspired by His Place */}
+        {/* Scalloped divider at bottom */}
         <div className="absolute bottom-0 left-0 right-0">
           <svg viewBox="0 0 1200 40" className="w-full" preserveAspectRatio="none">
             <path d="M0,40 C100,0 200,0 300,40 C400,0 500,0 600,40 C700,0 800,0 900,40 C1000,0 1100,0 1200,40 L1200,40 L0,40 Z" fill="white" />
@@ -132,18 +147,24 @@ export default function HomeContent() {
       </section>
 
       {/* ════════════════════════════════════════════════
-          DELIVERY BAR — DoorDash / Uber Eats badges
-          From D&K flyer: "Yes We Deliver"
+          DELIVERY BAR — configurable delivery partner badges
           ════════════════════════════════════════════════ */}
       <section className="bg-white py-5 border-b">
         <div className="max-w-6xl mx-auto px-6 flex items-center justify-center gap-8 flex-wrap">
-          <span className="text-[#d32f2f] font-bold text-sm uppercase tracking-widest flex items-center gap-2">
+          <span className="font-bold text-sm uppercase tracking-widest flex items-center gap-2" style={{ color: primaryColor }}>
             <Truck className="h-4 w-4" />
-            Yes We Deliver
+            {deliveryMessage}
           </span>
           <div className="flex items-center gap-4">
-            <span className="bg-[#FF3008] text-white text-xs font-bold px-3 py-1.5 rounded">DoorDash</span>
-            <span className="bg-[#06C167] text-white text-xs font-bold px-3 py-1.5 rounded">Uber Eats</span>
+            {deliveryPartners.map((partner: { name: string; color: string }) => (
+              <span
+                key={partner.name}
+                className="text-white text-xs font-bold px-3 py-1.5 rounded"
+                style={{ backgroundColor: partner.color }}
+              >
+                {partner.name}
+              </span>
+            ))}
           </div>
           {tenant.address && (
             <span className="text-gray-500 text-sm flex items-center gap-1.5">
@@ -156,12 +177,11 @@ export default function HomeContent() {
 
       {/* ════════════════════════════════════════════════
           FEATURED DISHES — Large food photography grid
-          Inspired by His Place hero carousel + Soulé card layout
           ════════════════════════════════════════════════ */}
       <section className="py-16 bg-white">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-12">
-            <p className="text-[#d32f2f] font-bold text-sm uppercase tracking-widest mb-2">From Our Kitchen</p>
+            <p className="font-bold text-sm uppercase tracking-widest mb-2" style={{ color: primaryColor }}>From Our Kitchen</p>
             <h2 className="text-4xl lg:text-5xl font-bold text-[#1a1a1a]" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
               Home Cooked Favorites
             </h2>
@@ -169,7 +189,7 @@ export default function HomeContent() {
 
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
             {featuredDishes.map((item: any, idx: number) => (
-              <FoodCard key={item._id || idx} item={item} large={idx === 0} />
+              <FoodCard key={item._id || idx} item={item} large={idx === 0} accentColor={accentColor} />
             ))}
           </div>
 
@@ -185,24 +205,23 @@ export default function HomeContent() {
 
       {/* ════════════════════════════════════════════════
           SUNDAY BUFFET — Prominent event section
-          From D&K flyer: yellow background, bold pricing
           ════════════════════════════════════════════════ */}
-      {publicEvents && publicEvents.length > 0 && (
-        <section className="py-16 bg-[#f9c80e]">
+      {publicEvents && publicEvents.length > 0 && publicEvents[0] && (
+        <section className="py-16" style={{ backgroundColor: accentColor }}>
           <div className="max-w-6xl mx-auto px-6">
             <Link href="/events" className="block group">
               <div className="text-center">
                 <p className="text-[#1a1a1a]/60 font-bold text-sm uppercase tracking-widest mb-2">
-                  Every {publicEvents[0].dayOfWeek !== undefined ? DAYS[publicEvents[0].dayOfWeek] : 'Week'}
-                  {' · '}{publicEvents[0].startTime} – {publicEvents[0].endTime}
+                  Every {publicEvents[0]!.dayOfWeek !== undefined ? DAYS[publicEvents[0]!.dayOfWeek!] : 'Week'}
+                  {' · '}{publicEvents[0]!.startTime} – {publicEvents[0]!.endTime}
                 </p>
                 <h2 className="text-4xl lg:text-6xl font-black text-[#1a1a1a] mb-2" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
-                  {publicEvents[0].name}
+                  {publicEvents[0]!.name}
                 </h2>
 
-                {publicEvents[0].pricingTiers && (
+                {publicEvents[0]!.pricingTiers && (
                   <div className="flex gap-6 lg:gap-10 justify-center mt-8 flex-wrap">
-                    {publicEvents[0].pricingTiers.map((tier: any) => {
+                    {publicEvents[0]!.pricingTiers!.map((tier: any) => {
                       const tierImg: Record<string, string> = {
                         'Adults': 'https://images.pexels.com/photos/6579011/pexels-photo-6579011.jpeg?auto=compress&cs=tinysrgb&w=400',
                         'Seniors': 'https://images.pexels.com/photos/4261996/pexels-photo-4261996.jpeg?auto=compress&cs=tinysrgb&w=400',
@@ -225,7 +244,7 @@ export default function HomeContent() {
                 )}
 
                 <p className="text-[#1a1a1a]/50 text-sm mt-6 group-hover:text-[#1a1a1a]/70 transition-colors">
-                  Last Seating 5pm · View Details →
+                  View Details →
                 </p>
               </div>
             </Link>
@@ -234,14 +253,17 @@ export default function HomeContent() {
       )}
 
       {/* ════════════════════════════════════════════════
-          TODAY'S SPECIAL
+          TODAY'S SPECIAL (or fallback CTA)
           ════════════════════════════════════════════════ */}
-      {todaySpecial && (
+      {todaySpecial ? (
         <section className="py-16 bg-[#1a1a1a]">
           <div className="max-w-4xl mx-auto px-6">
             <Link href="/events" className="block group">
               <div className="text-center mb-8">
-                <div className="inline-flex items-center gap-2 bg-[#d32f2f] text-white text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full mb-4">
+                <div
+                  className="inline-flex items-center gap-2 text-white text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full mb-4"
+                  style={{ backgroundColor: primaryColor }}
+                >
                   <Star className="h-3 w-3" /> Today&apos;s Special · {DAYS[today]}
                 </div>
                 <h2 className="text-3xl lg:text-4xl font-bold text-white" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
@@ -259,7 +281,7 @@ export default function HomeContent() {
                       <p className="font-semibold text-white">{item.name}</p>
                       {item.description && <p className="text-white/40 text-sm">{item.description}</p>}
                     </div>
-                    <span className="text-2xl font-black text-[#f9c80e] ml-4">${(item.price / 100).toFixed(2)}</span>
+                    <span className="text-2xl font-black ml-4" style={{ color: accentColor }}>${(item.price / 100).toFixed(2)}</span>
                   </div>
                 ))}
               </div>
@@ -270,11 +292,19 @@ export default function HomeContent() {
             </Link>
           </div>
         </section>
+      ) : (
+        <section className="py-12 bg-[#1a1a1a]">
+          <div className="max-w-4xl mx-auto px-6 text-center">
+            <p className="text-white/50 text-lg mb-3">Check our daily specials throughout the week</p>
+            <Link href="/events" className="font-semibold hover:underline" style={{ color: accentColor }}>
+              View All Specials →
+            </Link>
+          </div>
+        </section>
       )}
 
       {/* ════════════════════════════════════════════════
           FOOD GALLERY — Instagram-style grid
-          Inspired by His Place social feed
           ════════════════════════════════════════════════ */}
       {itemsWithImages.length > 0 && (
         <section className="py-0 bg-white">
@@ -299,13 +329,12 @@ export default function HomeContent() {
 
       {/* ════════════════════════════════════════════════
           ABOUT & HOURS — Split layout
-          Warm background, community feel from Soulé/Lo-Lo's
           ════════════════════════════════════════════════ */}
       <section className="py-16 bg-[#f5f0e8]">
         <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-2 gap-12">
           {/* About */}
           <div>
-            <p className="text-[#d32f2f] font-bold text-sm uppercase tracking-widest mb-3">About Us</p>
+            <p className="font-bold text-sm uppercase tracking-widest mb-3" style={{ color: primaryColor }}>About Us</p>
             <h2 className="text-3xl font-bold text-[#1a1a1a] mb-4" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
               {tenant.name}
             </h2>
@@ -313,13 +342,13 @@ export default function HomeContent() {
               <p className="text-[#4a4a4a] leading-relaxed mb-6">{tenant.aboutText}</p>
             )}
             <Link href="/about">
-              <span className="text-[#d32f2f] font-semibold text-sm hover:underline">Read Our Story →</span>
+              <span className="font-semibold text-sm hover:underline" style={{ color: primaryColor }}>Read Our Story →</span>
             </Link>
           </div>
 
           {/* Hours */}
           <div>
-            <p className="text-[#d32f2f] font-bold text-sm uppercase tracking-widest mb-3">Hours</p>
+            <p className="font-bold text-sm uppercase tracking-widest mb-3" style={{ color: primaryColor }}>Hours</p>
             <h2 className="text-3xl font-bold text-[#1a1a1a] mb-4" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
               Visit Us
             </h2>
@@ -330,9 +359,10 @@ export default function HomeContent() {
                     key={h.day}
                     className={`flex justify-between px-5 py-3 text-sm ${
                       h.day === today
-                        ? 'bg-[#d32f2f] text-white font-bold'
+                        ? 'text-white font-bold'
                         : 'bg-white text-[#4a4a4a] border-b border-[#eee5d5]'
                     }`}
+                    style={h.day === today ? { backgroundColor: primaryColor } : undefined}
                   >
                     <span>{DAYS[h.day]}</span>
                     <span>{h.isClosed ? 'Closed' : `${h.open} – ${h.close}`}</span>
@@ -342,7 +372,7 @@ export default function HomeContent() {
             )}
             <div className="mt-5 space-y-2">
               {tenant.phone && (
-                <a href={`tel:${tenant.phone}`} className="flex items-center gap-2 text-[#1a1a1a] font-semibold hover:text-[#d32f2f] transition-colors">
+                <a href={`tel:${tenant.phone}`} className="flex items-center gap-2 text-[#1a1a1a] font-semibold transition-colors" style={{ '--hover-color': primaryColor } as any}>
                   <Phone className="h-4 w-4" /> {tenant.phone}
                 </a>
               )}
@@ -358,9 +388,9 @@ export default function HomeContent() {
       </section>
 
       {/* ════════════════════════════════════════════════
-          BOTTOM CTA — Bold red
+          BOTTOM CTA — uses tenant primary color
           ════════════════════════════════════════════════ */}
-      <section className="py-20 bg-[#d32f2f]">
+      <section className="py-20" style={{ backgroundColor: primaryColor }}>
         <div className="max-w-6xl mx-auto px-6 text-center">
           <h2 className="text-4xl lg:text-5xl font-black text-white mb-3" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
             Ready to Eat?
@@ -370,7 +400,7 @@ export default function HomeContent() {
           </p>
           <div className="flex gap-4 justify-center flex-wrap">
             <Link href="/order">
-              <button className="bg-white text-[#d32f2f] font-bold text-lg px-10 py-4 rounded-full hover:bg-white/90 transition-colors shadow-lg">
+              <button className="bg-white font-bold text-lg px-10 py-4 rounded-full hover:bg-white/90 transition-colors shadow-lg" style={{ color: primaryColor }}>
                 Order Now
               </button>
             </Link>
@@ -389,7 +419,7 @@ export default function HomeContent() {
 /* ════════════════════════════════════════════════
    Food Card Component — large image with overlay text
    ════════════════════════════════════════════════ */
-function FoodCard({ item, large }: { item: any; large?: boolean }) {
+function FoodCard({ item, large, accentColor }: { item: any; large?: boolean; accentColor: string }) {
   const imgSrc = item.imageUrl;
 
   return (
@@ -406,7 +436,7 @@ function FoodCard({ item, large }: { item: any; large?: boolean }) {
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
       <div className="absolute bottom-0 left-0 right-0 p-4">
         <p className="text-white font-bold text-sm lg:text-base">{item.name}</p>
-        <p className="text-[#f9c80e] font-bold">${(item.price / 100).toFixed(2)}</p>
+        <p className="font-bold" style={{ color: accentColor }}>${(item.price / 100).toFixed(2)}</p>
       </div>
     </div>
   );

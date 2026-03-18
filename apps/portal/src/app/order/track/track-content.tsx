@@ -16,6 +16,7 @@ import {
   Separator,
 } from '@restaurantos/ui';
 import { Clock, Check, ChefHat, Package, Search } from 'lucide-react';
+import { toast } from 'sonner';
 
 const STATUS_STEPS = [
   { key: 'sent_to_kitchen', label: 'Order Received', icon: Check },
@@ -44,6 +45,14 @@ export default function OrderTrackPage() {
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     if (!tenantId || !orderNumber || !phone) return;
+
+    // Validate phone format (at least 10 digits)
+    const phoneDigits = phone.replace(/\D/g, '');
+    if (phoneDigits.length < 10) {
+      toast.error('Please enter a valid 10-digit phone number');
+      return;
+    }
+
     setLookupParams({
       tenantId,
       orderNumber: parseInt(orderNumber),
@@ -108,12 +117,22 @@ export default function OrderTrackPage() {
       {searching && order === null && (
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground">
-            No order found. Check your order number and phone number.
+            Loading...
           </CardContent>
         </Card>
       )}
 
-      {order && (
+      {searching && order && 'error' in order && (
+        <Card>
+          <CardContent className="py-8 text-center text-muted-foreground">
+            {order.error === 'order_not_found'
+              ? 'No order found with that number. Please check and try again.'
+              : 'Phone number does not match this order. Please check the number you used when placing the order.'}
+          </CardContent>
+        </Card>
+      )}
+
+      {order && !('error' in order) && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">

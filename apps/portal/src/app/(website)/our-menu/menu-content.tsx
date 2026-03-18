@@ -3,8 +3,8 @@
 import { useQuery } from 'convex/react';
 import { api } from '@restaurantos/backend';
 import { useTenant } from '@/hooks/use-tenant';
-import { Badge, Card, CardContent } from '@restaurantos/ui';
-import { Wine } from 'lucide-react';
+import { Badge } from '@restaurantos/ui';
+import { Wine, UtensilsCrossed } from 'lucide-react';
 
 const ALCOHOL_TYPES = ['beer', 'wine', 'spirits'];
 
@@ -66,25 +66,33 @@ function MenuShowcaseItem({ item }: { item: any }) {
   const displayImage = item.imageUrl || null;
   const itemType = item.type ?? 'food';
   const isAlcohol = ALCOHOL_TYPES.includes(itemType);
+  const isSoldOut = item.is86d === true;
 
   return (
-    <div className="flex gap-4 p-4 rounded-lg border hover:bg-accent/30 transition-colors">
-      {displayImage && (
+    <div className={`flex gap-4 p-4 rounded-lg border transition-colors ${isSoldOut ? 'opacity-60' : 'hover:bg-accent/30'}`}>
+      {displayImage ? (
         <img
           src={displayImage}
           alt={item.name}
           className="h-20 w-20 rounded-md object-cover flex-shrink-0"
         />
+      ) : (
+        <div className="h-20 w-20 rounded-md bg-muted flex items-center justify-center flex-shrink-0">
+          <UtensilsCrossed className="h-8 w-8 text-muted-foreground/40" />
+        </div>
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-semibold">{item.name}</h3>
+              {isSoldOut && (
+                <Badge variant="destructive" className="text-[10px]">Sold Out</Badge>
+              )}
               {isAlcohol && (
                 <Wine className="h-3.5 w-3.5 text-amber-500" />
               )}
-              {item.isSpecial && (
+              {item.isSpecial && !isSoldOut && (
                 <Badge className="text-[10px] bg-yellow-500">Special</Badge>
               )}
             </div>

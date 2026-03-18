@@ -117,6 +117,15 @@ export default defineSchema({
     ),
     stripeCustomerId: v.optional(v.string()),
 
+    // Website content (configurable per-tenant, with fallback defaults)
+    heroHeading: v.optional(v.string()), // e.g. "Soul Food."
+    heroSubheading: v.optional(v.string()), // e.g. "Made Fresh Daily."
+    deliveryMessage: v.optional(v.string()), // e.g. "Yes We Deliver"
+    deliveryPartners: v.optional(
+      v.array(v.object({ name: v.string(), color: v.string() }))
+    ), // e.g. [{name:"DoorDash",color:"#FF3008"}]
+    footerTagline: v.optional(v.string()), // e.g. "Fresh food, great service."
+
     // Website
     websiteEnabled: v.optional(v.boolean()),
     heroImageStorageId: v.optional(v.id("_storage")),

@@ -15,6 +15,9 @@ export default async function WebsiteLayout({ children }: { children: React.Reac
   let phone = '';
   let email = '';
   let address: any = null;
+  let primaryColor = '';
+  let socialLinks: any = null;
+  let footerTagline = '';
 
   if (subdomain) {
     try {
@@ -26,6 +29,9 @@ export default async function WebsiteLayout({ children }: { children: React.Reac
         phone = resolved.tenant.phone ?? '';
         email = resolved.tenant.email ?? '';
         address = resolved.tenant.address;
+        primaryColor = resolved.tenant.primaryColor ?? '';
+        socialLinks = resolved.tenant.socialLinks ?? null;
+        footerTagline = resolved.tenant.footerTagline ?? '';
         if (resolved.theme) {
           themeCSS = generateThemeCSS(resolved.theme);
         }
@@ -43,6 +49,9 @@ export default async function WebsiteLayout({ children }: { children: React.Reac
         phone={phone}
         email={email}
         address={address}
+        primaryColor={primaryColor}
+        socialLinks={socialLinks}
+        footerTagline={footerTagline}
       >
         {children}
       </WebsiteShell>

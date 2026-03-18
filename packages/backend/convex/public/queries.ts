@@ -1,5 +1,6 @@
 import { query } from "../_generated/server";
 import { v } from "convex/values";
+import { resolveStorageUrl } from "../lib/storage";
 
 /**
  * Public queries for website, online ordering, and order tracking.
@@ -74,13 +75,14 @@ export const getTenantWebsite = query({
 
     if (!tenant || tenant.status !== "active") return null;
 
-    // Get hero image URL
+    // Get hero image URL (resolve relative paths from self-hosted Convex)
     let heroImageUrl: string | null = null;
     if (tenant.heroImageStorageId) {
-      heroImageUrl = await ctx.storage.getUrl(tenant.heroImageStorageId);
+      const rawUrl = await ctx.storage.getUrl(tenant.heroImageStorageId);
+      heroImageUrl = resolveStorageUrl(rawUrl);
     }
 
-    // Get logo URL if it's a storage ID
+    // Get logo URL
     let logoUrl = tenant.logoUrl ?? null;
 
     // Get theme
@@ -109,6 +111,12 @@ export const getTenantWebsite = query({
       websiteEnabled: tenant.websiteEnabled,
       features: tenant.features,
       theme,
+      // Configurable website content
+      heroHeading: tenant.heroHeading,
+      heroSubheading: tenant.heroSubheading,
+      deliveryMessage: tenant.deliveryMessage,
+      deliveryPartners: tenant.deliveryPartners,
+      footerTagline: tenant.footerTagline,
     };
   },
 });
@@ -128,15 +136,14 @@ export const getFullMenu = query({
       .withIndex("by_tenantId", (q) => q.eq("tenantId", args.tenantId))
       .collect();
 
-    // Include all available items (including alcohol) for the menu showcase
-    // Filter out 86'd items
+    // Include all items for the menu showcase (including 86'd with flag)
     const menu = activeCategories.map((cat) => ({
       ...cat,
       items: items
-        .filter((i) => i.categoryId === cat._id && !i.is86d && i.isAvailable)
+        .filter((i) => i.categoryId === cat._id && i.isAvailable)
         .map((i) => ({
           ...i,
-          // Resolve image URLs will be handled client-side via getImageUrl query
+          imageUrl: i.imageUrl ?? null,
         })),
     }));
 
@@ -215,6 +222,12 @@ export const getMenu = query({
 
     const now = Date.now();
 
+    // Check if tenant has any alcohol items (for UX banner)
+    const hasAlcoholItems = items.some((i) => {
+      const itemType = i.type ?? "food";
+      return (ALCOHOL_TYPES as readonly string[]).includes(itemType);
+    });
+
     // Group items by category, filtering out:
     // 1. 86'd items
     // 2. Alcohol items (no alcohol on online ordering)
@@ -235,7 +248,10 @@ export const getMenu = query({
     }));
 
     // Only return categories that have items
-    return menu.filter((cat) => cat.items.length > 0);
+    return {
+      categories: menu.filter((cat) => cat.items.length > 0),
+      hasAlcoholItems,
+    };
   },
 });
 
@@ -252,13 +268,16 @@ export const getOrderStatus = query({
       .withIndex("by_tenantId", (q) => q.eq("tenantId", args.tenantId))
       .collect();
 
-    const order = orders.find(
-      (o) =>
-        o.orderNumber === args.orderNumber &&
-        o.customerPhone === args.customerPhone
-    );
+    // First check if order exists by number, then verify phone
+    const orderByNumber = orders.find((o) => o.orderNumber === args.orderNumber);
+    if (!orderByNumber) {
+      return { error: "order_not_found" as const };
+    }
+    if (orderByNumber.customerPhone !== args.customerPhone) {
+      return { error: "phone_mismatch" as const };
+    }
 
-    if (!order) return null;
+    const order = orderByNumber;
 
     return {
       _id: order._id,

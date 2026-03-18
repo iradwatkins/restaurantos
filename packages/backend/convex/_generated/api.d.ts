@@ -19,6 +19,7 @@ import type * as events_queries from "../events/queries.js";
 import type * as kds_mutations from "../kds/mutations.js";
 import type * as kds_queries from "../kds/queries.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_storage from "../lib/storage.js";
 import type * as menu_mutations from "../menu/mutations.js";
 import type * as menu_queries from "../menu/queries.js";
 import type * as onboarding from "../onboarding.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   "kds/mutations": typeof kds_mutations;
   "kds/queries": typeof kds_queries;
   "lib/auth": typeof lib_auth;
+  "lib/storage": typeof lib_storage;
   "menu/mutations": typeof menu_mutations;
   "menu/queries": typeof menu_queries;
   onboarding: typeof onboarding;

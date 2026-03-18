@@ -352,6 +352,11 @@ function BusinessInfoTab({ tenant, onSave }: { tenant: any; onSave: any }) {
               <option value="America/Chicago">Central (CT)</option>
               <option value="America/Denver">Mountain (MT)</option>
               <option value="America/Los_Angeles">Pacific (PT)</option>
+              <option value="America/Anchorage">Alaska (AKT)</option>
+              <option value="Pacific/Honolulu">Hawaii (HST)</option>
+              <option value="America/Phoenix">Arizona (MST, no DST)</option>
+              <option value="America/Puerto_Rico">Puerto Rico (AST)</option>
+              <option value="Pacific/Guam">Guam (ChST)</option>
             </select>
           </div>
           <Button type="submit">
@@ -489,6 +494,15 @@ function AlcoholTab({ tenant, onSave }: { tenant: any; onSave: any }) {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
+
+    // Validate alcohol sale hours
+    const start = form.get('alcoholSaleHoursStart') as string;
+    const end = form.get('alcoholSaleHoursEnd') as string;
+    if (start && end && start === end) {
+      toast.error('Sale start and end times cannot be the same');
+      return;
+    }
+
     try {
       await onSave({
         id: tenant._id,
@@ -496,8 +510,8 @@ function AlcoholTab({ tenant, onSave }: { tenant: any; onSave: any }) {
         liquorLicenseExpiry: form.get('liquorLicenseExpiry')
           ? new Date(form.get('liquorLicenseExpiry') as string).getTime()
           : undefined,
-        alcoholSaleHoursStart: (form.get('alcoholSaleHoursStart') as string) || undefined,
-        alcoholSaleHoursEnd: (form.get('alcoholSaleHoursEnd') as string) || undefined,
+        alcoholSaleHoursStart: start || undefined,
+        alcoholSaleHoursEnd: end || undefined,
       });
       toast.success('Alcohol settings updated');
     } catch (err: any) {
@@ -670,14 +684,21 @@ function OnlineOrderingTab({ tenant, onSave }: { tenant: any; onSave: any }) {
 }
 
 function BrandingTab({ tenant, onSave }: { tenant: any; onSave: any }) {
+  const [primaryColor, setPrimaryColor] = useState(tenant.primaryColor ?? '#E63946');
+  const [accentColor, setAccentColor] = useState(tenant.accentColor ?? '#457B9D');
+
+  function isValidHex(value: string) {
+    return /^#[0-9A-Fa-f]{6}$/.test(value);
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     try {
       await onSave({
         id: tenant._id,
-        primaryColor: (form.get('primaryColor') as string) || undefined,
-        accentColor: (form.get('accentColor') as string) || undefined,
+        primaryColor: isValidHex(primaryColor) ? primaryColor : undefined,
+        accentColor: isValidHex(accentColor) ? accentColor : undefined,
         logoUrl: (form.get('logoUrl') as string) || undefined,
       });
       toast.success('Branding updated');
@@ -700,15 +721,19 @@ function BrandingTab({ tenant, onSave }: { tenant: any; onSave: any }) {
               <div className="flex gap-2 items-center">
                 <Input
                   id="primaryColor"
-                  name="primaryColor"
                   type="color"
-                  defaultValue={tenant.primaryColor ?? '#E63946'}
+                  value={primaryColor}
+                  onChange={(e) => setPrimaryColor(e.target.value)}
                   className="w-14 h-10 p-1 cursor-pointer"
                 />
                 <Input
-                  defaultValue={tenant.primaryColor ?? '#E63946'}
+                  value={primaryColor}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setPrimaryColor(val.startsWith('#') ? val : `#${val}`);
+                  }}
                   className="flex-1"
-                  readOnly
+                  placeholder="#E63946"
                 />
               </div>
             </div>
@@ -717,15 +742,19 @@ function BrandingTab({ tenant, onSave }: { tenant: any; onSave: any }) {
               <div className="flex gap-2 items-center">
                 <Input
                   id="accentColor"
-                  name="accentColor"
                   type="color"
-                  defaultValue={tenant.accentColor ?? '#457B9D'}
+                  value={accentColor}
+                  onChange={(e) => setAccentColor(e.target.value)}
                   className="w-14 h-10 p-1 cursor-pointer"
                 />
                 <Input
-                  defaultValue={tenant.accentColor ?? '#457B9D'}
+                  value={accentColor}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAccentColor(val.startsWith('#') ? val : `#${val}`);
+                  }}
                   className="flex-1"
-                  readOnly
+                  placeholder="#457B9D"
                 />
               </div>
             </div>
@@ -739,7 +768,7 @@ function BrandingTab({ tenant, onSave }: { tenant: any; onSave: any }) {
               placeholder="https://..."
             />
             <p className="text-xs text-muted-foreground">
-              Direct URL to your logo image. Photo upload coming soon.
+              Direct URL to your logo image.
             </p>
           </div>
           <Button type="submit">
@@ -892,13 +921,10 @@ function StaffDialog({
         });
         toast.success('Staff member updated');
       } else {
-        const bcrypt = await import('bcryptjs');
-        const password = form.get('password') as string;
-        const passwordHash = await bcrypt.hash(password, 12);
         await onCreate({
           tenantId,
           email: form.get('email') as string,
-          passwordHash,
+          password: form.get('password') as string,
           name: (form.get('name') as string) || undefined,
           role: form.get('role') as string,
         });
@@ -985,10 +1011,7 @@ function ResetPasswordDialog({
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     try {
-      const bcrypt = await import('bcryptjs');
-      const password = form.get('password') as string;
-      const newPasswordHash = await bcrypt.hash(password, 12);
-      await onReset({ id: user._id, newPasswordHash });
+      await onReset({ id: user._id, newPassword: form.get('password') as string });
       toast.success(`Password reset for ${user.name || user.email}`);
       onOpenChange(false);
     } catch (err: any) {
