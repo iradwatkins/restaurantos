@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-typecheck-test:
+    name: Lint, Type Check & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm turbo build --filter=@restaurantos/backend --filter=@restaurantos/config --filter=@restaurantos/ui
+
+      - name: Run tests
+        run: pnpm turbo test
+
+  build:
+    name: Build Apps
+    runs-on: ubuntu-latest
+    needs: lint-typecheck-test
+
+    strategy:
+      matrix:
+        app: [admin, portal]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build ${{ matrix.app }}
+        run: pnpm turbo build --filter=@restaurantos/${{ matrix.app }}
+        env:
+          NEXT_PUBLIC_CONVEX_URL: https://convex.restaurants.irawatkins.com
