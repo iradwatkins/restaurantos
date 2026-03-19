@@ -10,7 +10,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
   Input,
   Label,
   Badge,
@@ -21,7 +20,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@restaurantos/ui';
-import { Plus, Pencil, Trash2, CalendarDays, Star, Clock } from 'lucide-react';
+import { Plus, Pencil, Trash2, CalendarDays, Star } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -55,8 +54,8 @@ export default function EventsMgmtContent() {
         tenantId: tenantId!,
         name: form.get('name') as string,
         description: (form.get('description') as string) || undefined,
-        category: form.get('category') as any,
-        recurrence: form.get('recurrence') as any,
+        category: form.get('category') as string as "buffet" | "special" | "prix_fixe" | "holiday" | "other",
+        recurrence: form.get('recurrence') as string as "once" | "weekly" | "monthly",
         dayOfWeek: form.get('recurrence') === 'weekly' ? parseInt(form.get('dayOfWeek') as string) : undefined,
         startTime: form.get('startTime') as string,
         endTime: form.get('endTime') as string,

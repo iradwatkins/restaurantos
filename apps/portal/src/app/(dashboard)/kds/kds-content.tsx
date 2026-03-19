@@ -5,6 +5,7 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '@restaurantos/backend';
 import { useTenant } from '@/hooks/use-tenant';
 import { Button, Badge } from '@restaurantos/ui';
+import type { Id } from '@restaurantos/backend/dataModel';
 import { Check, RotateCcw, Clock, ChefHat } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -69,7 +70,7 @@ export default function KDSPage() {
     return <div className="p-6 text-muted-foreground">Loading...</div>;
   }
 
-  async function handleBumpTicket(ticketId: any) {
+  async function handleBumpTicket(ticketId: Id<"kdsTickets">) {
     try {
       const result = await bumpTicket({ ticketId });
       toast.success(`Order #${result.orderNumber} bumped`);
@@ -78,7 +79,7 @@ export default function KDSPage() {
     }
   }
 
-  async function handleBumpItem(ticketId: any, itemIndex: number) {
+  async function handleBumpItem(ticketId: Id<"kdsTickets">, itemIndex: number) {
     try {
       await bumpItem({ ticketId, itemIndex });
     } catch (err: any) {
@@ -86,7 +87,7 @@ export default function KDSPage() {
     }
   }
 
-  async function handleRecall(ticketId: any) {
+  async function handleRecall(ticketId: Id<"kdsTickets">) {
     try {
       await recallTicket({ ticketId });
       toast.success('Ticket recalled');

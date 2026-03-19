@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@restaurantos/backend';
+import type { Id } from '@restaurantos/backend/dataModel';
 import { useTenant } from '@/hooks/use-tenant';
 import {
   Button,
@@ -11,14 +12,11 @@ import {
   CardHeader,
   CardTitle,
   Badge,
-  Input,
-  Label,
   Separator,
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@restaurantos/ui';
 import {
   Table,
@@ -28,9 +26,8 @@ import {
   TableHeader,
   TableRow,
 } from '@restaurantos/ui';
-import { Plus, ShoppingBag, CreditCard, DollarSign, Send, Wine, AlertTriangle } from 'lucide-react';
+import { Plus, ShoppingBag, CreditCard, DollarSign, Send, Wine } from 'lucide-react';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
 
 const ALCOHOL_TYPES = ['beer', 'wine', 'spirits'];
 
@@ -155,7 +152,7 @@ export default function OrdersPage() {
       await createOrder({
         tenantId,
         source: 'dine_in',
-        tableId: selectedTable as any || undefined,
+        tableId: selectedTable as Id<"tables"> || undefined,
         tableName: tables?.find((t) => t._id === selectedTable)?.name,
         items: cart,
         subtotal,

@@ -12,7 +12,7 @@ export default defineSchema({
       v.literal("support"),
       v.literal("viewer")
     ),
-    status: v.optional(v.string()), // active, inactive
+    status: v.optional(v.union(v.literal("active"), v.literal("inactive"))),
     lastLoginAt: v.optional(v.number()),
     createdAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
@@ -211,14 +211,15 @@ export default defineSchema({
       v.literal("server"),
       v.literal("cashier")
     ),
-    status: v.optional(v.string()), // active, inactive, suspended
+    status: v.optional(v.union(v.literal("active"), v.literal("inactive"), v.literal("suspended"))),
     lastLoginAt: v.optional(v.number()),
     createdAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
   })
     .index("by_email", ["email"])
     .index("by_tenantId", ["tenantId"])
-    .index("by_tenantId_email", ["tenantId", "email"]),
+    .index("by_tenantId_email", ["tenantId", "email"])
+    .index("by_tenantId_status", ["tenantId", "status"]),
 
   // ==================== Delivery Configs ====================
   deliveryConfigs: defineTable({
@@ -245,7 +246,7 @@ export default defineSchema({
 
   // ==================== Audit Logs ====================
   auditLogs: defineTable({
-    action: v.string(), // create, update, delete
+    action: v.union(v.literal("create"), v.literal("update"), v.literal("delete")),
     entityType: v.string(),
     entityId: v.string(),
     userId: v.optional(v.string()),
@@ -491,7 +492,13 @@ export default defineSchema({
     tenantId: v.id("tenants"),
     orderId: v.id("orders"),
     orderNumber: v.number(),
-    source: v.string(), // dine_in, online, doordash, ubereats, grubhub
+    source: v.union(
+      v.literal("dine_in"),
+      v.literal("online"),
+      v.literal("doordash"),
+      v.literal("ubereats"),
+      v.literal("grubhub")
+    ),
     sourceBadge: v.string(), // Display label: "Dine-In", "DoorDash", etc.
     status: v.union(
       v.literal("new"),
@@ -531,7 +538,13 @@ export default defineSchema({
     ticketId: v.id("kdsTickets"),
     orderId: v.id("orders"),
     orderNumber: v.number(),
-    source: v.string(),
+    source: v.union(
+      v.literal("dine_in"),
+      v.literal("online"),
+      v.literal("doordash"),
+      v.literal("ubereats"),
+      v.literal("grubhub")
+    ),
     bumpedAt: v.number(),
     items: v.array(
       v.object({
@@ -676,7 +689,7 @@ export default defineSchema({
     stripeInvoiceId: v.string(),
     amountDue: v.number(), // cents
     amountPaid: v.number(), // cents
-    status: v.string(), // paid, open, void, draft
+    status: v.union(v.literal("paid"), v.literal("open"), v.literal("void"), v.literal("draft")),
     invoiceDate: v.number(), // epoch ms
     paidAt: v.optional(v.number()),
     invoiceUrl: v.optional(v.string()),
@@ -747,6 +760,13 @@ export default defineSchema({
   })
     .index("by_tenantId", ["tenantId"])
     .index("by_tenantId_dayOfWeek", ["tenantId", "dayOfWeek"]),
+
+  // ==================== Order Counters (daily sequential numbering) ====================
+  orderCounters: defineTable({
+    tenantId: v.id("tenants"),
+    date: v.string(), // "YYYY-MM-DD"
+    count: v.number(),
+  }).index("by_tenantId_date", ["tenantId", "date"]),
 
   // ==================== Webhook Ingestion Log ====================
   webhookLogs: defineTable({

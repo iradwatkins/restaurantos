@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { headers, cookies } from 'next/headers';
 import { extractSubdomain } from '@/lib/tenant';
+import { logger } from '@/lib/logger';
 
 export async function POST() {
   try {
@@ -16,7 +17,7 @@ export async function POST() {
 
     return response;
   } catch (error) {
-    console.error('Logout error:', error);
+    logger.error({ err: error }, 'Logout error');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

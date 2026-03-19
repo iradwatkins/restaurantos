@@ -82,10 +82,26 @@ export async function getCurrentUser(ctx: QueryCtx | MutationCtx) {
     throw new Error("No email found in auth token");
   }
 
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_email", (q) => q.eq("email", email as string))
-    .first();
+  let user = null;
+
+  // Try tenant-scoped lookup first when tenantId is available
+  const tenantId = (identity as any).tenantId;
+  if (tenantId) {
+    user = await ctx.db
+      .query("users")
+      .withIndex("by_tenantId_email", (q) =>
+        q.eq("tenantId", tenantId).eq("email", email as string)
+      )
+      .first();
+  }
+
+  // Fall back to email-only lookup
+  if (!user) {
+    user = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", email as string))
+      .first();
+  }
 
   if (!user) {
     throw new Error("User not found");

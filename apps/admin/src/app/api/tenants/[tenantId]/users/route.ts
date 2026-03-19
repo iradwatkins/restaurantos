@@ -4,6 +4,7 @@ import { convexClient } from '@/lib/auth/convex-client';
 import { Id } from '@restaurantos/backend/dataModel';
 import { hash } from 'bcryptjs';
 import { getSession } from '@/lib/auth';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   _request: Request,
@@ -22,7 +23,7 @@ export async function GET(
 
     return NextResponse.json({ users });
   } catch (error) {
-    console.error('Error fetching tenant users:', error);
+    logger.error({ err: error }, 'Error fetching tenant users');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -59,7 +60,7 @@ export async function POST(
     if (error?.message?.includes('already exists')) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
-    console.error('Error creating tenant user:', error);
+    logger.error({ err: error }, 'Error creating tenant user');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

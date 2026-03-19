@@ -59,7 +59,12 @@ export default function OnlineOrderPage() {
     estimatedReadyAt?: number;
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [showModifierDialog, setShowModifierDialog] = useState<any>(null);
+  const [showModifierDialog, setShowModifierDialog] = useState<{
+    _id: string;
+    name: string;
+    price: number;
+    description?: string;
+  } | null>(null);
   const [selectedModifiers, setSelectedModifiers] = useState<Record<string, string[]>>({});
   const [scheduledTime, setScheduledTime] = useState<string>('');
   const [clientSecret, setClientSecret] = useState<string | null>(null);

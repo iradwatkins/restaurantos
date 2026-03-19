@@ -22,7 +22,7 @@ import {
 } from '@restaurantos/ui';
 import { Plus, Pencil, Trash2, Ban, Check, Upload, Star, Wine, ImageIcon, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Id } from '@restaurantos/backend/dataModel';
+import type { Doc, Id } from '@restaurantos/backend/dataModel';
 
 const ITEM_TYPES = [
   { value: 'food', label: 'Food' },
@@ -64,20 +64,19 @@ export default function MenuPage() {
   const updateModifierGroup = useMutation(api.menu.mutations.updateModifierGroup);
   const deleteModifierGroup = useMutation(api.menu.mutations.deleteModifierGroup);
   const createModifierOption = useMutation(api.menu.mutations.createModifierOption);
-  const updateModifierOption = useMutation(api.menu.mutations.updateModifierOption);
   const deleteModifierOption = useMutation(api.menu.mutations.deleteModifierOption);
 
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   const [showItemDialog, setShowItemDialog] = useState(false);
   const [showModifierDialog, setShowModifierDialog] = useState(false);
-  const [editingCategory, setEditingCategory] = useState<any>(null);
-  const [editingItem, setEditingItem] = useState<any>(null);
-  const [editingModifierGroup, setEditingModifierGroup] = useState<any>(null);
+  const [editingCategory, setEditingCategory] = useState<Doc<"menuCategories"> | null>(null);
+  const [editingItem, setEditingItem] = useState<Doc<"menuItems"> | null>(null);
+  const [editingModifierGroup, setEditingModifierGroup] = useState<Doc<"modifierGroups"> | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<'all' | 'specials' | 'alcohol'>('all');
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [managingModifiersFor, setManagingModifiersFor] = useState<any>(null);
+  const [managingModifiersFor, setManagingModifiersFor] = useState<Doc<"menuItems"> | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   if (!tenantId) {
@@ -178,7 +177,7 @@ export default function MenuPage() {
         }
         await createItem({
           tenantId,
-          categoryId: selectedCategory as any,
+          categoryId: selectedCategory as Id<"menuCategories">,
           name: form.get('name') as string,
           description: (form.get('description') as string) || undefined,
           price,
@@ -329,8 +328,8 @@ export default function MenuPage() {
     filteredItems = filteredItems?.filter((i) => ALCOHOL_TYPES.includes(i.type ?? 'food'));
   }
 
-  function getItemModifierGroups(itemId: string) {
-    return modifierGroups?.filter((g) => g.menuItemIds.includes(itemId as any)) ?? [];
+  function getItemModifierGroups(itemId: Id<"menuItems">) {
+    return modifierGroups?.filter((g) => g.menuItemIds.includes(itemId)) ?? [];
   }
 
   return (
@@ -819,7 +818,6 @@ export default function MenuPage() {
                 <ModifierGroupCard
                   key={group._id}
                   group={group}
-                  tenantId={tenantId}
                   onAddOption={handleAddModifierOption}
                   onDeleteGroup={handleDeleteModifierGroup}
                   onDeleteOption={handleDeleteModifierOption}
@@ -931,13 +929,11 @@ function ItemImage({ storageId, name }: { storageId: Id<'_storage'>; name: strin
 
 function ModifierGroupCard({
   group,
-  tenantId,
   onAddOption,
   onDeleteGroup,
   onDeleteOption,
 }: {
   group: any;
-  tenantId: Id<'tenants'>;
   onAddOption: (groupId: Id<'modifierGroups'>, name: string, price: string) => Promise<void>;
   onDeleteGroup: (groupId: Id<'modifierGroups'>) => Promise<void>;
   onDeleteOption: (optionId: Id<'modifierOptions'>) => Promise<void>;

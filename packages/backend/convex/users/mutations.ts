@@ -1,6 +1,7 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
 import bcrypt from "bcryptjs";
+import { validateEmail, validatePasswordComplexity } from "../lib/validators";
 
 export const create = mutation({
   args: {
@@ -16,6 +17,9 @@ export const create = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    validateEmail(args.email);
+    validatePasswordComplexity(args.password);
+
     // Check uniqueness within tenant
     const existing = await ctx.db
       .query("users")
@@ -60,10 +64,13 @@ export const update = mutation({
         v.literal("cashier")
       )
     ),
-    status: v.optional(v.string()),
+    status: v.optional(v.union(v.literal("active"), v.literal("inactive"), v.literal("suspended"))),
     email: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    if (args.email) {
+      validateEmail(args.email);
+    }
     const { id, ...updates } = args;
     await ctx.db.patch(id, { ...updates, updatedAt: Date.now() });
   },
@@ -75,6 +82,7 @@ export const resetPassword = mutation({
     newPassword: v.string(),
   },
   handler: async (ctx, args) => {
+    validatePasswordComplexity(args.newPassword);
     const passwordHash = await bcrypt.hash(args.newPassword, 12);
     await ctx.db.patch(args.id, {
       passwordHash,

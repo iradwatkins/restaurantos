@@ -3,6 +3,7 @@ import { api } from '@restaurantos/backend';
 import { convexClient } from '@/lib/auth/convex-client';
 import { Id } from '@restaurantos/backend/dataModel';
 import { getSession } from '@/lib/auth';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   _request: Request,
@@ -25,7 +26,7 @@ export async function GET(
 
     return NextResponse.json({ tenant });
   } catch (error) {
-    console.error('Error fetching tenant:', error);
+    logger.error({ err: error }, 'Error fetching tenant');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -54,7 +55,7 @@ export async function PUT(
 
     return NextResponse.json({ tenant: updated });
   } catch (error) {
-    console.error('Error updating tenant:', error);
+    logger.error({ err: error }, 'Error updating tenant');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

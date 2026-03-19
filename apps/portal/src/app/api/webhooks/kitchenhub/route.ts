@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { api } from '@restaurantos/backend';
 import { convexClient } from '@/lib/auth/convex-client';
+import { logger } from '@/lib/logger';
 
 /**
  * KitchenHub Webhook Endpoint
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
       orderNumber: result.orderNumber,
     });
   } catch (error: any) {
-    console.error('[KitchenHub Webhook] Error:', error);
+    logger.error({ err: error }, 'KitchenHub webhook error');
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }

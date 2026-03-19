@@ -5,6 +5,9 @@ import { convexClient } from '@/lib/auth/convex-client';
 import { compare } from 'bcryptjs';
 import { extractSubdomain } from '@/lib/tenant';
 import { createAndSetSession } from '@/lib/auth/session-manager';
+import { logger } from '@/lib/logger';
+import { getClientIp } from '@/lib/rate-limit';
+import { checkLoginRateLimit, recordFailedAttempt, resetAttempts } from '@/lib/login-rate-limit';
 
 export async function POST(request: Request) {
   try {
@@ -22,6 +25,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
     }
 
+    // Brute-force protection: check rate limit by IP + email
+    const ip = getClientIp(request);
+    const rateLimitKey = `${ip}:${email}`;
+    const { allowed, retryAfterMs } = checkLoginRateLimit(rateLimitKey);
+
+    if (!allowed) {
+      return NextResponse.json(
+        { error: 'Too many failed login attempts. Please try again later.' },
+        {
+          status: 429,
+          headers: { 'Retry-After': String(Math.ceil((retryAfterMs || 0) / 1000)) },
+        }
+      );
+    }
+
     // Find tenant by subdomain
     const tenant = await convexClient.query(api.tenants.queries.getBySubdomain, { subdomain });
     if (!tenant) {
@@ -35,6 +53,7 @@ export async function POST(request: Request) {
     });
 
     if (!user || !user.passwordHash) {
+      recordFailedAttempt(rateLimitKey);
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
@@ -44,8 +63,12 @@ export async function POST(request: Request) {
 
     const validPassword = await compare(password, user.passwordHash);
     if (!validPassword) {
+      recordFailedAttempt(rateLimitKey);
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
+
+    // Successful login — reset rate limit counter
+    resetAttempts(rateLimitKey);
 
     const response = NextResponse.json({
       success: true,
@@ -68,7 +91,7 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error) {
-    console.error('Login error:', error);
+    logger.error({ err: error }, 'Login error');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

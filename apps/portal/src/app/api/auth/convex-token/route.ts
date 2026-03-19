@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import { extractSubdomain } from '@/lib/tenant';
 import { getSessionFromCookies } from '@/lib/auth/session-manager';
 import { getPrivateKey, getKeyId } from '@/lib/auth/jwks';
+import { logger } from '@/lib/logger';
 
 export async function GET(request: Request) {
   try {
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ token: convexToken });
   } catch (error) {
-    console.error('[Convex Token] Error:', error);
+    logger.error({ err: error }, 'Failed to generate Convex token');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

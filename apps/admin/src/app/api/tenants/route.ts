@@ -3,6 +3,7 @@ import { api } from '@restaurantos/backend';
 import { convexClient } from '@/lib/auth/convex-client';
 import { hash } from 'bcryptjs';
 import { getSession } from '@/lib/auth';
+import { logger } from '@/lib/logger';
 
 export async function GET() {
   try {
@@ -14,7 +15,7 @@ export async function GET() {
     const tenants = await convexClient.query(api.tenants.queries.list, {});
     return NextResponse.json({ tenants });
   } catch (error) {
-    console.error('Error fetching tenants:', error);
+    logger.error({ err: error }, 'Error fetching tenants');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
     if (error?.message?.includes('Subdomain already taken')) {
       return NextResponse.json({ error: 'Subdomain already taken' }, { status: 409 });
     }
-    console.error('Error creating tenant:', error);
+    logger.error({ err: error }, 'Error creating tenant');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

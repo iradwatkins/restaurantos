@@ -1,5 +1,6 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
+import { validateEmail } from "../lib/validators";
 
 export const createAdminUser = mutation({
   args: {
@@ -13,6 +14,7 @@ export const createAdminUser = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    validateEmail(args.email);
     const existing = await ctx.db
       .query("adminUsers")
       .withIndex("by_email", (q) => q.eq("email", args.email))

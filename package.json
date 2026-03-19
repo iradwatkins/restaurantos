@@ -14,10 +14,17 @@
     "db:seed": "turbo run db:seed",
     "db:studio": "turbo run db:studio",
     "format": "prettier --write \"**/*.{ts,tsx,json,md,css}\"",
-    "format:check": "prettier --check \"**/*.{ts,tsx,json,md,css}\""
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,md,css}\"",
+    "analyze": "ANALYZE=true turbo run build",
+    "lighthouse": "lhci autorun"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.1",
+    "@lhci/cli": "^0.15.1",
+    "@playwright/test": "^1.58.2",
+    "@types/jest-axe": "^3.5.9",
     "@vitest/coverage-v8": "^4.0.18",
+    "jest-axe": "^10.0.0",
     "prettier": "^3.5.3",
     "turbo": "^2.0.0",
     "typescript": "^5.7.0",

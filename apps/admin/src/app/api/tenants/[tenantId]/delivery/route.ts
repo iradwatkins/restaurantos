@@ -3,6 +3,7 @@ import { api } from '@restaurantos/backend';
 import { convexClient } from '@/lib/auth/convex-client';
 import { Id } from '@restaurantos/backend/dataModel';
 import { getSession } from '@/lib/auth';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   _request: Request,
@@ -25,7 +26,7 @@ export async function GET(
 
     return NextResponse.json({ config });
   } catch (error) {
-    console.error('Error fetching delivery config:', error);
+    logger.error({ err: error }, 'Error fetching delivery config');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -58,7 +59,7 @@ export async function PUT(
     if (error?.message?.includes('At least one platform')) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    console.error('Error updating delivery config:', error);
+    logger.error({ err: error }, 'Error updating delivery config');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

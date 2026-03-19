@@ -38,6 +38,7 @@ import {
   LayoutTemplate,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import type { Doc } from '@restaurantos/backend/dataModel';
 
 const TABS = [
   { id: 'business', label: 'Business Info', icon: Building2 },
@@ -74,8 +75,8 @@ export default function SettingsPage() {
 
   const [activeTab, setActiveTab] = useState<TabId>('business');
   const [showStaffDialog, setShowStaffDialog] = useState(false);
-  const [editingStaff, setEditingStaff] = useState<any>(null);
-  const [showResetDialog, setShowResetDialog] = useState<any>(null);
+  const [editingStaff, setEditingStaff] = useState<Doc<"users"> | null>(null);
+  const [showResetDialog, setShowResetDialog] = useState<Doc<"users"> | null>(null);
 
   if (!tenant) {
     return <div className="p-6 text-muted-foreground">Loading...</div>;

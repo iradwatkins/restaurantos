@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getJwks } from '@/lib/auth/jwks';
+import { logger } from '@/lib/logger';
 
 export async function GET() {
   try {
@@ -13,7 +14,7 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error('[JWKS] Error:', error);
+    logger.error({ err: error }, 'Failed to generate JWKS');
     return NextResponse.json({ error: 'Failed to generate JWKS' }, { status: 500 });
   }
 }

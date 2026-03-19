@@ -9,12 +9,10 @@ import {
   CardHeader,
   CardTitle,
   Badge,
-  Separator,
 } from '@restaurantos/ui';
-import { CalendarDays, Clock, Users, Utensils, Star } from 'lucide-react';
+import { CalendarDays, Clock, Utensils, Star } from 'lucide-react';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const SHORT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 // Buffet pricing tier images — Black people (replace with better ones via portal)
 const TIER_IMAGES: Record<string, string> = {

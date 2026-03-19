@@ -29,8 +29,12 @@ import {
 } from '@restaurantos/ui';
 import { Plus, Pencil, Trash2, CalendarDays, DollarSign, Utensils } from 'lucide-react';
 import { toast } from 'sonner';
+import type { Doc, Id } from '@restaurantos/backend/dataModel';
+import type { BadgeProps } from '@restaurantos/ui';
 
-const STATUS_COLORS: Record<string, string> = {
+type BadgeVariant = NonNullable<BadgeProps["variant"]>;
+
+const STATUS_COLORS: Record<string, BadgeVariant> = {
   inquiry: 'secondary',
   confirmed: 'default',
   deposit_paid: 'default',
@@ -69,9 +73,8 @@ export default function CateringManagementPage() {
 
   const [activeView, setActiveView] = useState<'orders' | 'menu' | 'calendar'>('orders');
   const [showItemDialog, setShowItemDialog] = useState(false);
-  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editingItem, setEditingItem] = useState<Doc<"cateringMenuItems"> | null>(null);
   const [showCatDialog, setShowCatDialog] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
   if (!tenantId || !tenant) {
     return <div className="p-6 text-muted-foreground">Loading...</div>;
@@ -125,7 +128,7 @@ export default function CateringManagementPage() {
       } else {
         await createItem({
           tenantId: tenantId!,
-          categoryId: form.get('categoryId') as any,
+          categoryId: form.get('categoryId') as string as Id<"cateringCategories">,
           name: form.get('name') as string,
           description: (form.get('description') as string) || undefined,
           servingSize: form.get('servingSize') as string,
@@ -241,7 +244,7 @@ export default function CateringManagementPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={STATUS_COLORS[order.status] as any} className="capitalize">
+                      <Badge variant={STATUS_COLORS[order.status]} className="capitalize">
                         {order.status.replace('_', ' ')}
                       </Badge>
                     </TableCell>
@@ -346,7 +349,7 @@ export default function CateringManagementPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <p className="font-semibold">{event.customerName}</p>
-                        <Badge variant={STATUS_COLORS[event.status] as any} className="capitalize text-xs">
+                        <Badge variant={STATUS_COLORS[event.status]} className="capitalize text-xs">
                           {event.status.replace('_', ' ')}
                         </Badge>
                       </div>

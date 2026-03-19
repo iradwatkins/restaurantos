@@ -29,6 +29,9 @@ jobs:
       - name: Type check
         run: pnpm turbo build --filter=@restaurantos/backend --filter=@restaurantos/config --filter=@restaurantos/ui
 
+      - name: Security audit
+        run: pnpm audit --audit-level=high
+
       - name: Run tests
         run: pnpm turbo test
 
@@ -60,3 +63,33 @@ jobs:
         run: pnpm turbo build --filter=@restaurantos/${{ matrix.app }}
         env:
           NEXT_PUBLIC_CONVEX_URL: https://convex.restaurants.irawatkins.com
+
+  lighthouse:
+    name: Lighthouse CI
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build portal
+        run: pnpm turbo build --filter=@restaurantos/portal
+        env:
+          NEXT_PUBLIC_CONVEX_URL: https://convex.restaurants.irawatkins.com
+
+      - name: Lighthouse CI
+        run: pnpm lighthouse
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}

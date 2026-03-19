@@ -16,8 +16,12 @@ import {
 import { Plus, Search, Ban, CheckCircle, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import type { Id } from '@restaurantos/backend/dataModel';
+import type { BadgeProps } from '@restaurantos/ui';
 
-const statusVariant: Record<string, any> = {
+type BadgeVariant = NonNullable<BadgeProps["variant"]>;
+
+const statusVariant: Record<string, BadgeVariant> = {
   active: 'success',
   suspended: 'destructive',
   trial: 'warning',
@@ -28,7 +32,7 @@ export default function TenantsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [planFilter, setPlanFilter] = useState<string>('');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Id<"tenants">[]>([]);
 
   const allTenants = useQuery(api.admin.queries.listTenantsFiltered, {
     search: search || undefined,
@@ -41,7 +45,7 @@ export default function TenantsPage() {
   const deleteTenant = useMutation(api.admin.mutations.deleteTenant);
   const bulkUpdateStatus = useMutation(api.admin.mutations.bulkUpdateStatus);
 
-  function toggleSelect(id: string) {
+  function toggleSelect(id: Id<"tenants">) {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     );
@@ -59,11 +63,11 @@ export default function TenantsPage() {
     if (selectedIds.length === 0) return;
     if (!confirm(`${status === 'suspended' ? 'Suspend' : 'Activate'} ${selectedIds.length} tenant(s)?`)) return;
     try {
-      await bulkUpdateStatus({ ids: selectedIds as any[], status });
+      await bulkUpdateStatus({ ids: selectedIds, status });
       toast.success(`${selectedIds.length} tenant(s) updated`);
       setSelectedIds([]);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed');
     }
   }
 
