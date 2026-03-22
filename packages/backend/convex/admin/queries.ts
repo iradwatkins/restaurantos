@@ -24,27 +24,40 @@ export const listTenantsFiltered = query({
     search: v.optional(v.string()),
     status: v.optional(v.string()),
     plan: v.optional(v.string()),
+    limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    let tenants = await ctx.db.query("tenants").collect();
+    const resultLimit = args.limit ?? 200;
 
+    // Use the by_status index when filtering by status to avoid full table scan
+    let tenants;
+    if (args.status) {
+      tenants = await ctx.db
+        .query("tenants")
+        .withIndex("by_status", (q) =>
+          q.eq("status", args.status as "active" | "suspended" | "trial" | "churned")
+        )
+        .take(resultLimit);
+    } else {
+      tenants = await ctx.db.query("tenants").take(resultLimit);
+    }
+
+    // Apply in-memory filters for search and plan (these don't have dedicated indexes)
+    let filtered = tenants;
     if (args.search) {
       const s = args.search.toLowerCase();
-      tenants = tenants.filter(
+      filtered = filtered.filter(
         (t) =>
           t.name.toLowerCase().includes(s) ||
           t.subdomain.toLowerCase().includes(s) ||
           (t.email ?? "").toLowerCase().includes(s)
       );
     }
-    if (args.status) {
-      tenants = tenants.filter((t) => t.status === args.status);
-    }
     if (args.plan) {
-      tenants = tenants.filter((t) => t.plan === args.plan);
+      filtered = filtered.filter((t) => t.plan === args.plan);
     }
 
-    return tenants.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+    return filtered.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
   },
 });
 
@@ -153,18 +166,22 @@ export const getAuditLogs = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const resultLimit = args.limit ?? 100;
+
     let logs;
     if (args.tenantId) {
       logs = await ctx.db
         .query("auditLogs")
         .withIndex("by_tenantId", (q) => q.eq("tenantId", args.tenantId))
-        .collect();
+        .order("desc")
+        .take(resultLimit);
     } else {
-      logs = await ctx.db.query("auditLogs").collect();
+      // Without a tenantId filter, use default ordering (desc by _creationTime)
+      // and cap at the requested limit to avoid loading the entire table
+      logs = await ctx.db.query("auditLogs").order("desc").take(resultLimit);
     }
 
-    // Sort by newest first and limit
-    const sorted = logs.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
-    return sorted.slice(0, args.limit ?? 100);
+    // Sort by createdAt (may differ from _creationTime)
+    return logs.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
   },
 });

@@ -14,6 +14,35 @@ const nextConfig: NextConfig = {
   images: {
     formats: ['image/avif', 'image/webp'],
     minimumCacheTTL: 60 * 60 * 24 * 30, // 30 days
+    remotePatterns: [
+      // Self-hosted Convex storage on VPS
+      {
+        protocol: 'http',
+        hostname: '72.60.28.175',
+      },
+      // Convex cloud storage (if using hosted Convex)
+      {
+        protocol: 'https',
+        hostname: '*.convex.cloud',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.convex.site',
+      },
+      // External image sources used in website content
+      {
+        protocol: 'https',
+        hostname: 'images.pexels.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'images.nappy.co',
+      },
+      {
+        protocol: 'https',
+        hostname: 'iheartrecipes.com',
+      },
+    ],
   },
   async headers() {
     return [

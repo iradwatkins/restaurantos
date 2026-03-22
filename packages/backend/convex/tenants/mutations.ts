@@ -856,6 +856,16 @@ export const updateAccountingCredentials = mutation({
     xeroTenantId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    // This mutation is called from OAuth callback routes.
+    // Require tenant access to prevent unauthorized credential writes.
+    const user = await requireTenantAccess(ctx);
+    if (user.tenantId !== args.tenantId) {
+      throw new Error("Forbidden");
+    }
+    if (user.role !== "owner" && user.role !== "manager") {
+      throw new Error("Only owners and managers can update accounting credentials");
+    }
+
     const tenant = await ctx.db.get(args.tenantId);
     if (!tenant) throw new Error("Tenant not found");
 

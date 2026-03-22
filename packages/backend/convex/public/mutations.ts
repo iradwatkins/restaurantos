@@ -3,6 +3,72 @@ import { v } from "convex/values";
 import { Id } from "../_generated/dataModel";
 
 /**
+ * Submit a contact form message (no auth required — customer-facing).
+ * Validates email format and non-empty fields server-side.
+ * Rate-limited: max 5 submissions per email per tenant per hour.
+ */
+export const submitContactForm = mutation({
+  args: {
+    tenantId: v.id("tenants"),
+    name: v.string(),
+    email: v.string(),
+    message: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // ── Validation ──
+    const name = args.name.trim();
+    const email = args.email.trim().toLowerCase();
+    const message = args.message.trim();
+
+    if (!name) throw new Error("Name is required");
+    if (!email) throw new Error("Email is required");
+    if (!message) throw new Error("Message is required");
+
+    // Basic email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new Error("Please enter a valid email address");
+    }
+
+    if (message.length > 5000) {
+      throw new Error("Message must be 5,000 characters or fewer");
+    }
+
+    // ── Verify tenant exists ──
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant || tenant.status !== "active") {
+      throw new Error("Restaurant not found");
+    }
+
+    // ── Rate limiting: max 5 submissions per email per tenant per hour ──
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    const recentSubmissions = await ctx.db
+      .query("contactSubmissions")
+      .withIndex("by_tenantId_createdAt", (q) =>
+        q.eq("tenantId", args.tenantId).gte("createdAt", oneHourAgo)
+      )
+      .collect();
+
+    const fromThisEmail = recentSubmissions.filter((s) => s.email === email);
+    if (fromThisEmail.length >= 5) {
+      throw new Error("Too many submissions. Please try again later.");
+    }
+
+    // ── Store submission ──
+    await ctx.db.insert("contactSubmissions", {
+      tenantId: args.tenantId,
+      name,
+      email,
+      message,
+      status: "new",
+      createdAt: Date.now(),
+    });
+
+    return { success: true };
+  },
+});
+
+/**
  * Place an online order (no auth required — customer-facing).
  * All prices are verified server-side from the database.
  * Client-supplied price fields are ignored for calculations.

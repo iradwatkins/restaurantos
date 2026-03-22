@@ -25,6 +25,11 @@ const ROUTE_TITLES: Record<string, string> = {
   '/marketing': 'Marketing',
   '/reports': 'Reports',
   '/settings': 'Settings',
+  '/deliveries': 'Deliveries',
+  '/reservations': 'Reservations',
+  '/floor-plan': 'Floor Plan',
+  '/events-mgmt': 'Events Management',
+  '/catering-mgmt': 'Catering Management',
 };
 
 interface PortalHeaderProps {

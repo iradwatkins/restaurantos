@@ -5,6 +5,7 @@ import { api } from '@restaurantos/backend';
 import { useTenant } from '@/hooks/use-tenant';
 import { Clock, MapPin, Phone, ArrowRight, Star, Truck } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -104,16 +105,20 @@ export default function HomeContent({ initialData }: HomeContentProps) {
           HERO — Full-screen food image with bold tagline
           ════════════════════════════════════════════════ */}
       <section className="relative min-h-[85vh] flex items-center overflow-hidden bg-[#1a1a1a]">
-        <img
+        <Image
           src={heroImage}
           alt={`${tenant.name} — fresh soul food dishes`}
-          className="absolute inset-0 w-full h-full object-cover"
+          fill
+          className="object-cover"
+          priority
+          sizes="100vw"
+          unoptimized={!heroImage.includes('convex') && !heroImage.includes('72.60.28.175')}
         />
         <div className="absolute inset-0 bg-gradient-to-r from-[#1a1a1a]/70 via-[#1a1a1a]/30 to-transparent" />
 
         <div className="relative w-full max-w-6xl mx-auto px-6 py-16 text-left">
           {tenant.logoUrl && (
-            <img src={tenant.logoUrl} alt={`${tenant.name} logo`} className="h-20 lg:h-28 mb-6 drop-shadow-2xl" />
+            <Image src={tenant.logoUrl} alt={`${tenant.name} logo`} width={112} height={112} className="h-20 lg:h-28 w-auto mb-6 drop-shadow-2xl" unoptimized={!tenant.logoUrl.includes('convex') && !tenant.logoUrl.includes('72.60.28.175')} />
           )}
 
           <h1 className="text-5xl sm:text-6xl lg:text-8xl font-black text-white tracking-tight leading-none mb-4" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
@@ -261,7 +266,9 @@ export default function HomeContent({ initialData }: HomeContentProps) {
                       return (
                         <div key={tier._id} className="bg-[#1a1a1a] rounded-2xl overflow-hidden text-center min-w-[160px] shadow-xl group-hover:scale-105 transition-transform">
                           {img && (
-                            <img src={img} alt={tier.tierName} className="w-full h-32 object-cover" />
+                            <div className="relative w-full h-32">
+                              <Image src={img} alt={tier.tierName} fill className="object-cover" sizes="160px" unoptimized />
+                            </div>
                           )}
                           <div className="px-6 py-4">
                             <p className="text-white/60 text-sm font-medium mb-1">{tier.tierName}</p>
@@ -341,10 +348,13 @@ export default function HomeContent({ initialData }: HomeContentProps) {
           <div className="grid grid-cols-4 md:grid-cols-8">
             {itemsWithImages.slice(0, 8).map((item: any, idx: number) => (
               <div key={idx} tabIndex={0} className="aspect-square overflow-hidden relative group">
-                <img
+                <Image
                   src={item.imageUrl}
                   alt={item.name}
-                  className="w-full h-full object-cover group-hover:scale-110 group-focus-within:scale-110 transition-transform duration-500"
+                  fill
+                  className="object-cover group-hover:scale-110 group-focus-within:scale-110 transition-transform duration-500"
+                  sizes="(max-width: 768px) 25vw, 12.5vw"
+                  unoptimized={!item.imageUrl.includes('convex') && !item.imageUrl.includes('72.60.28.175')}
                 />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 group-focus-within:bg-black/50 transition-colors flex items-end">
                   <p className="text-white text-xs font-medium p-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity truncate w-full">
@@ -457,12 +467,15 @@ function FoodCard({ item, large, accentColor }: { item: any; large?: boolean; ac
 
   return (
     <div className={`relative rounded-2xl overflow-hidden group ${large ? 'row-span-2 col-span-2 lg:col-span-1 lg:row-span-2' : ''}`}>
-      <div className={`${large ? 'aspect-[3/4]' : 'aspect-square'} bg-gray-100`}>
+      <div className={`${large ? 'aspect-[3/4]' : 'aspect-square'} bg-gray-100 relative`}>
         {imgSrc && (
-          <img
+          <Image
             src={imgSrc}
             alt={item.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            fill
+            className="object-cover group-hover:scale-105 transition-transform duration-500"
+            sizes={large ? '(max-width: 1024px) 50vw, 33vw' : '(max-width: 768px) 50vw, 33vw'}
+            unoptimized={!imgSrc.includes('convex') && !imgSrc.includes('72.60.28.175')}
           />
         )}
       </div>

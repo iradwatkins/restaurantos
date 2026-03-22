@@ -5,7 +5,8 @@ import { api } from '@restaurantos/backend';
 import { useTenant } from '@/hooks/use-tenant';
 import { Button } from '@restaurantos/ui';
 import Link from 'next/link';
-import { ArrowRight, MapPin, Phone, Mail } from 'lucide-react';
+import { ArrowRight, MapPin, Phone, Mail, AlertTriangle } from 'lucide-react';
+import Image from 'next/image';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -29,7 +30,12 @@ export default function AboutPage({ initialData }: AboutPageProps) {
   const websiteData = initialData?.websiteData ?? clientWebsiteData;
 
   if (!tenant) {
-    return <div className="text-center py-20 text-muted-foreground">Loading...</div>;
+    return (
+      <div className="max-w-2xl mx-auto text-center py-20 px-4">
+        <AlertTriangle className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
+        <p className="text-muted-foreground">Unable to load this page. Please try again later.</p>
+      </div>
+    );
   }
 
   const primaryColor = tenant.primaryColor || '#d32f2f';
@@ -43,10 +49,14 @@ export default function AboutPage({ initialData }: AboutPageProps) {
       {/* Hero section */}
       {heroImage && (
         <section className="relative h-64 md:h-80 overflow-hidden">
-          <img
+          <Image
             src={heroImage}
             alt={`About ${tenant.name}`}
-            className="w-full h-full object-cover"
+            fill
+            className="object-cover"
+            priority
+            sizes="100vw"
+            unoptimized={!heroImage.includes('convex') && !heroImage.includes('72.60.28.175')}
           />
           <div className="absolute inset-0 bg-black/40" />
           <div className="absolute inset-0 flex items-center justify-center">

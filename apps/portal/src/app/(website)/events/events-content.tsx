@@ -10,7 +10,8 @@ import {
   CardTitle,
   Badge,
 } from '@restaurantos/ui';
-import { CalendarDays, Clock, Utensils, Star } from 'lucide-react';
+import { CalendarDays, Clock, Utensils, Star, AlertTriangle } from 'lucide-react';
+import Image from 'next/image';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -50,7 +51,12 @@ export default function EventsContent({ initialData }: EventsContentProps) {
   const today = new Date().getDay();
 
   if (!tenantId) {
-    return <div className="text-center py-20 text-muted-foreground">Loading...</div>;
+    return (
+      <div className="max-w-2xl mx-auto text-center py-20 px-4">
+        <AlertTriangle className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
+        <p className="text-muted-foreground">Unable to load this page. Please try again later.</p>
+      </div>
+    );
   }
 
   return (
@@ -98,16 +104,19 @@ export default function EventsContent({ initialData }: EventsContentProps) {
                 {event.pricingTiers && event.pricingTiers.length > 0 && (
                   <div className="grid gap-4 sm:grid-cols-3">
                     {event.pricingTiers.map((tier: any) => {
-                      const tierImage = TIER_IMAGES[tier.tierName] || TIER_IMAGES['default'];
+                      const tierImage = TIER_IMAGES[tier.tierName] ?? TIER_IMAGES['default'] ?? TIER_IMAGES['Adults']!;
                       return (
                         <div
                           key={tier._id}
                           className="relative rounded-xl overflow-hidden h-56 group"
                         >
-                          <img
+                          <Image
                             src={tierImage}
                             alt={tier.tierName}
-                            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            fill
+                            className="object-cover group-hover:scale-105 transition-transform duration-500"
+                            sizes="(max-width: 640px) 100vw, 33vw"
+                            unoptimized
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
                           <div className="absolute bottom-0 left-0 right-0 p-5 text-center text-white">

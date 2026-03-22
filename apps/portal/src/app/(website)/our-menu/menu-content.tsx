@@ -4,7 +4,8 @@ import { useQuery } from 'convex/react';
 import { api } from '@restaurantos/backend';
 import { useTenant } from '@/hooks/use-tenant';
 import { Badge } from '@restaurantos/ui';
-import { Wine, UtensilsCrossed } from 'lucide-react';
+import { Wine, UtensilsCrossed, AlertTriangle } from 'lucide-react';
+import Image from 'next/image';
 
 const ALCOHOL_TYPES = ['beer', 'wine', 'spirits'];
 
@@ -22,8 +23,22 @@ export default function MenuShowcasePage({ initialMenu }: MenuShowcaseProps) {
 
   const menu = initialMenu ?? clientMenu;
 
+  if (menu === undefined && !initialMenu && tenantId) {
+    // Still loading client-side data
+    return (
+      <div className="text-center py-20 text-muted-foreground">
+        <div role="status" aria-live="polite" className="animate-pulse motion-reduce:animate-none">Loading menu...</div>
+      </div>
+    );
+  }
+
   if (!menu) {
-    return <div className="text-center py-20 text-muted-foreground">Loading menu...</div>;
+    return (
+      <div className="max-w-2xl mx-auto text-center py-20 px-4">
+        <AlertTriangle className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
+        <p className="text-muted-foreground">Unable to load the menu. Please try again later.</p>
+      </div>
+    );
   }
 
   return (
@@ -77,11 +92,16 @@ function MenuShowcaseItem({ item }: { item: any }) {
   return (
     <div className={`flex gap-4 p-4 rounded-lg border transition-colors ${isSoldOut ? 'opacity-60' : 'hover:bg-accent/30'}`}>
       {displayImage ? (
-        <img
-          src={displayImage}
-          alt={item.name}
-          className="h-20 w-20 rounded-md object-cover flex-shrink-0"
-        />
+        <div className="relative h-20 w-20 flex-shrink-0">
+          <Image
+            src={displayImage}
+            alt={item.name}
+            width={80}
+            height={80}
+            className="rounded-md object-cover h-20 w-20"
+            unoptimized={!displayImage.includes('convex') && !displayImage.includes('72.60.28.175')}
+          />
+        </div>
       ) : (
         <div className="h-20 w-20 rounded-md bg-muted flex items-center justify-center flex-shrink-0">
           <UtensilsCrossed className="h-8 w-8 text-muted-foreground/40" />

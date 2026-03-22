@@ -1,8 +1,34 @@
+import type { Metadata } from 'next';
 import { headers } from 'next/headers';
-import { extractSubdomain } from '@/lib/tenant';
+import { extractSubdomain, resolveTenant } from '@/lib/tenant';
 import { convexClient } from '@/lib/auth/convex-client';
 import { api } from '@restaurantos/backend';
 import ReservationsPage from './reservations-content';
+
+export async function generateMetadata(): Promise<Metadata> {
+  const headersList = await headers();
+  const host = headersList.get('host') || '';
+  const subdomain = extractSubdomain(host);
+
+  if (!subdomain) return { title: 'Reservations' };
+
+  try {
+    const resolved = await resolveTenant(subdomain);
+    if (!resolved) return { title: 'Reservations' };
+    const name = resolved.tenant.name;
+    return {
+      title: `Reservations`,
+      description: `Book a table at ${name}. Reserve online for your preferred date and time.`,
+      openGraph: {
+        title: `Reservations | ${name}`,
+        description: `Book a table at ${name}`,
+        type: 'website',
+      },
+    };
+  } catch {
+    return { title: 'Reservations' };
+  }
+}
 
 export default async function ReservationsServerPage() {
   const headersList = await headers();

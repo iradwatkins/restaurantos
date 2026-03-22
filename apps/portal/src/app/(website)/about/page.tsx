@@ -1,8 +1,34 @@
+import type { Metadata } from 'next';
 import { headers } from 'next/headers';
-import { extractSubdomain } from '@/lib/tenant';
+import { extractSubdomain, resolveTenant } from '@/lib/tenant';
 import { convexClient } from '@/lib/auth/convex-client';
 import { api } from '@restaurantos/backend';
 import AboutPage from './about-content';
+
+export async function generateMetadata(): Promise<Metadata> {
+  const headersList = await headers();
+  const host = headersList.get('host') || '';
+  const subdomain = extractSubdomain(host);
+
+  if (!subdomain) return { title: 'About Us' };
+
+  try {
+    const resolved = await resolveTenant(subdomain);
+    if (!resolved) return { title: 'About Us' };
+    const name = resolved.tenant.name;
+    return {
+      title: `About Us`,
+      description: resolved.tenant.tagline || `Learn about ${name} — our story, hours, and location.`,
+      openGraph: {
+        title: `About ${name}`,
+        description: resolved.tenant.tagline || `Learn about ${name}`,
+        type: 'website',
+      },
+    };
+  } catch {
+    return { title: 'About Us' };
+  }
+}
 
 export default async function AboutServerPage() {
   const headersList = await headers();

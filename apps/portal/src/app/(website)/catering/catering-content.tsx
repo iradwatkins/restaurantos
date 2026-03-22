@@ -15,7 +15,7 @@ import {
   Badge,
   Separator,
 } from '@restaurantos/ui';
-import { Check, Plus, Minus, CalendarDays, Users, Utensils } from 'lucide-react';
+import { Check, Plus, Minus, CalendarDays, Users, Utensils, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface CateringCartItem {
@@ -59,7 +59,12 @@ export default function CateringPage({ initialData }: CateringPageProps) {
   const [submitting, setSubmitting] = useState(false);
 
   if (!tenant) {
-    return <div className="text-center py-20 text-muted-foreground">Loading...</div>;
+    return (
+      <div className="max-w-2xl mx-auto text-center py-20 px-4">
+        <AlertTriangle className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
+        <p className="text-muted-foreground">Unable to load this page. Please try again later.</p>
+      </div>
+    );
   }
 
   if (!tenant.features?.catering) {

@@ -1,7 +1,63 @@
+import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { extractSubdomain, resolveTenant } from '@/lib/tenant';
 import { generateThemeCSS } from '@/lib/theme';
 import { WebsiteShell } from './website-shell';
+
+export async function generateMetadata(): Promise<Metadata> {
+  const headersList = await headers();
+  const host = headersList.get('host') || '';
+  const subdomain = extractSubdomain(host);
+
+  if (!subdomain) {
+    return {
+      title: 'RestaurantOS',
+      description: 'Restaurant management platform',
+    };
+  }
+
+  try {
+    const resolved = await resolveTenant(subdomain);
+    if (!resolved) {
+      return { title: 'RestaurantOS' };
+    }
+
+    const { tenant } = resolved;
+    const tenantName = tenant.name;
+    const description =
+      tenant.heroSubheading ||
+      tenant.tagline ||
+      `Welcome to ${tenantName} — order online, view our menu, and more.`;
+    const canonicalUrl = `https://${subdomain}.restaurantos.app`;
+    const heroImage = tenant.logoUrl || undefined;
+
+    return {
+      title: {
+        default: `${tenantName} - ${description}`,
+        template: `%s | ${tenantName}`,
+      },
+      description,
+      alternates: {
+        canonical: canonicalUrl,
+      },
+      openGraph: {
+        title: `${tenantName} - ${description}`,
+        description,
+        url: canonicalUrl,
+        siteName: tenantName,
+        type: 'website',
+        ...(heroImage ? { images: [{ url: heroImage, alt: tenantName }] } : {}),
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title: `${tenantName} - ${description}`,
+        description,
+      },
+    };
+  } catch {
+    return { title: 'RestaurantOS' };
+  }
+}
 
 export default async function WebsiteLayout({ children }: { children: React.ReactNode }) {
   const headersList = await headers();

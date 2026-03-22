@@ -68,6 +68,54 @@ export function ensureContrast(foreground: string | undefined | null, background
   return whiteRatio >= darkRatio ? WHITE : DARK;
 }
 
+/**
+ * Validate that a CSS value is a safe HSL string (e.g. "222.2 84% 4.9%")
+ * or a simple CSS token (e.g. "0.5rem"). Blocks script injection and
+ * CSS injection attacks via stored theme values.
+ */
+const HSL_PATTERN = /^\d{1,3}(\.\d+)?\s+\d{1,3}(\.\d+)?%?\s+\d{1,3}(\.\d+)?%?$/;
+const RADIUS_PATTERN = /^\d+(\.\d+)?(rem|px|em)$/;
+
+function sanitizeThemeValue(
+  value: string | undefined | null,
+  varName: string,
+  defaults: Record<string, string>
+): string | null {
+  if (!value) return null;
+
+  // --radius uses a length value, not HSL
+  if (varName === '--radius') {
+    return RADIUS_PATTERN.test(value) ? value : (defaults[varName] ?? null);
+  }
+
+  // All other theme vars are HSL values
+  return HSL_PATTERN.test(value) ? value : (defaults[varName] ?? null);
+}
+
+// Safe default HSL values matching the default theme from tenant creation
+const THEME_DEFAULTS: Record<string, string> = {
+  '--background': '0 0% 100%',
+  '--foreground': '222.2 84% 4.9%',
+  '--primary': '0 72% 51%',
+  '--primary-foreground': '210 40% 98%',
+  '--secondary': '210 40% 96.1%',
+  '--secondary-foreground': '222.2 47.4% 11.2%',
+  '--accent': '210 40% 96.1%',
+  '--accent-foreground': '222.2 47.4% 11.2%',
+  '--muted': '210 40% 96.1%',
+  '--muted-foreground': '215.4 16.3% 46.9%',
+  '--card': '0 0% 100%',
+  '--card-foreground': '222.2 84% 4.9%',
+  '--popover': '0 0% 100%',
+  '--popover-foreground': '222.2 84% 4.9%',
+  '--border': '214.3 31.8% 91.4%',
+  '--input': '214.3 31.8% 91.4%',
+  '--ring': '0 72% 51%',
+  '--destructive': '0 84.2% 60.2%',
+  '--destructive-foreground': '210 40% 98%',
+  '--radius': '0.5rem',
+};
+
 // Works with any object that has the theme properties (Convex doc or plain object)
 export function generateThemeCSS(theme: Record<string, any>): string {
   const vars: string[] = [];
@@ -116,9 +164,10 @@ export function generateThemeCSS(theme: Record<string, any>): string {
     ['--radius', theme.radius],
   ];
 
-  for (const [varName, value] of mappings) {
-    if (value) {
-      vars.push(`${varName}: ${value};`);
+  for (const [varName, rawValue] of mappings) {
+    const safeValue = sanitizeThemeValue(rawValue, varName, THEME_DEFAULTS);
+    if (safeValue) {
+      vars.push(`${varName}: ${safeValue};`);
     }
   }
 

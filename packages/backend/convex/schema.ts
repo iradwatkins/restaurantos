@@ -251,8 +251,8 @@ export default defineSchema({
     sidebarBorder: v.optional(v.string()),
     sidebarRing: v.optional(v.string()),
 
-    // Dark mode overrides
-    darkMode: v.optional(v.any()),
+    // Dark mode overrides (boolean flag — true enables dark mode variant)
+    darkMode: v.optional(v.boolean()),
 
     // Typography
     fontSans: v.optional(v.string()),
@@ -296,9 +296,30 @@ export default defineSchema({
     khWebhookSecret: v.optional(v.string()),
 
     // Direct API configs
-    doordashConfig: v.optional(v.any()),
-    ubereatsConfig: v.optional(v.any()),
-    grubhubConfig: v.optional(v.any()),
+    doordashConfig: v.optional(
+      v.object({
+        developerId: v.optional(v.string()),
+        keyId: v.optional(v.string()),
+        signingSecret: v.optional(v.string()),
+        storeId: v.optional(v.string()),
+        enabled: v.optional(v.boolean()),
+      })
+    ),
+    ubereatsConfig: v.optional(
+      v.object({
+        clientId: v.optional(v.string()),
+        clientSecret: v.optional(v.string()),
+        storeId: v.optional(v.string()),
+        enabled: v.optional(v.boolean()),
+      })
+    ),
+    grubhubConfig: v.optional(
+      v.object({
+        accessToken: v.optional(v.string()),
+        restaurantId: v.optional(v.string()),
+        enabled: v.optional(v.boolean()),
+      })
+    ),
 
     // State tracking
     lastModeSwitch: v.optional(v.number()),
@@ -316,10 +337,13 @@ export default defineSchema({
     userId: v.optional(v.string()),
     userType: v.optional(v.string()), // admin, tenant_user, system
     userEmail: v.optional(v.string()),
+    // Audit log captures arbitrary before/after state — v.any() is intentional
+    // because these log the full shape of whatever entity was modified.
     oldValues: v.optional(v.any()),
     newValues: v.optional(v.any()),
     changes: v.optional(v.any()),
     tenantId: v.optional(v.string()),
+    // Freeform metadata for audit context (action type, IP, etc.)
     metadata: v.optional(v.any()),
     createdAt: v.optional(v.number()),
   })
@@ -912,6 +936,8 @@ export default defineSchema({
       v.literal("processed"),
       v.literal("failed")
     ),
+    // Webhook payloads are external platform JSON — shape varies per provider.
+    // v.any() is intentional since we store raw payloads for debugging.
     payload: v.optional(v.any()),
     errorMessage: v.optional(v.string()),
     processedAt: v.optional(v.number()),
@@ -1180,6 +1206,23 @@ export default defineSchema({
     lastRunAt: v.optional(v.number()), // epoch ms
     createdAt: v.number(),
   }).index("by_tenantId", ["tenantId"]),
+
+  // ==================== Contact Form Submissions ====================
+  contactSubmissions: defineTable({
+    tenantId: v.id("tenants"),
+    name: v.string(),
+    email: v.string(),
+    message: v.string(),
+    status: v.union(
+      v.literal("new"),
+      v.literal("read"),
+      v.literal("replied")
+    ),
+    createdAt: v.number(),
+  })
+    .index("by_tenantId", ["tenantId"])
+    .index("by_tenantId_status", ["tenantId", "status"])
+    .index("by_tenantId_createdAt", ["tenantId", "createdAt"]),
 
   // ==================== Deliveries (Third-Party Delivery Tracking) ====================
   deliveries: defineTable({
