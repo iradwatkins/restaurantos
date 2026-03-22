@@ -135,7 +135,7 @@ interface OrderItem {
 
 type Step = 'menu' | 'info' | 'review' | 'success';
 
-export default function SchoolLunchContent({ tenantName, primaryColor, accentColor, phone }: SchoolLunchContentProps) {
+export default function SchoolLunchContent({ primaryColor, accentColor, phone }: SchoolLunchContentProps) {
   // Order state
   const [cart, setCart] = useState<Record<string, OrderItem>>({});
   const [step, setStep] = useState<Step>('menu');
