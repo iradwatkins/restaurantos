@@ -9,7 +9,7 @@ const PUBLIC_PATH_EXACT = ['/order'];
 const PUBLIC_PATH_STARTS = ['/order/']; // matches /order/track etc.
 
 // Website paths — public when subdomain is present
-const WEBSITE_PATHS = ['/', '/our-menu', '/about', '/contact', '/catering', '/events'];
+const WEBSITE_PATHS = ['/', '/our-menu', '/about', '/contact', '/catering', '/events', '/school-lunch', '/gift-cards'];
 
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATH_PREFIXES.some((p) => pathname.startsWith(p))) return true;

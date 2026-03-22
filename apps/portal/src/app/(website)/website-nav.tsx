@@ -46,6 +46,7 @@ export function WebsiteNav({
     ...(hasReservations ? [{ href: '/book', label: 'Reservations' }] : []),
     { href: '/about', label: 'About' },
     { href: '/contact', label: 'Contact' },
+    { href: '/school-lunch', label: 'School Lunch' },
     ...(hasCatering ? [{ href: '/catering', label: 'Catering' }] : []),
   ];
 
