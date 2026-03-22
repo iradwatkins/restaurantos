@@ -41,13 +41,12 @@ export function WebsiteNav({
   const links = [
     { href: '/', label: 'Home' },
     { href: '/our-menu', label: 'Menu' },
+    ...(hasCatering ? [{ href: '/catering', label: 'Catering' }] : []),
+    { href: '/school-lunch', label: 'School Lunch' },
     { href: '/events', label: 'Events & Specials' },
-    { href: '/gift-cards', label: 'Gift Cards' },
     ...(hasReservations ? [{ href: '/book', label: 'Reservations' }] : []),
     { href: '/about', label: 'About' },
     { href: '/contact', label: 'Contact' },
-    { href: '/school-lunch', label: 'School Lunch' },
-    ...(hasCatering ? [{ href: '/catering', label: 'Catering' }] : []),
   ];
 
   function isActive(href: string) {
