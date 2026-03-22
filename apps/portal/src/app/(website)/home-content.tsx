@@ -87,17 +87,25 @@ export default function HomeContent({ initialData }: HomeContentProps) {
   const todayHours = tenant.businessHours?.find((h: any) => h.day === today);
   const allItems = menu?.flatMap((cat: any) => cat.items) ?? [];
   const itemsWithImages = allItems.filter((i: any) => i.imageUrl);
-  const featuredDishes = allItems.slice(0, 6);
 
-  // Find the best hero image — look for fried chicken first, then any dinner item
-  const heroImage = (() => {
-    const friedChicken = allItems.find((i: any) => i.imageUrl && i.name.toLowerCase().includes('fried chicken'));
-    if (friedChicken) return friedChicken.imageUrl;
-    const anyDinner = allItems.find((i: any) => i.imageUrl && (i.name.toLowerCase().includes('chicken') || i.name.toLowerCase().includes('chop')));
-    if (anyDinner) return anyDinner.imageUrl;
-    if (itemsWithImages.length > 0) return itemsWithImages[0].imageUrl;
-    return 'https://iheartrecipes.com/wp-content/uploads/2018/03/friedchicken6-1-scaled.jpg';
+  // Pick hero image — each image used ONCE across all sections
+  const heroItem = (() => {
+    const friedChicken = itemsWithImages.find((i: any) => i.name.toLowerCase().includes('fried chicken'));
+    if (friedChicken) return friedChicken;
+    const anyChicken = itemsWithImages.find((i: any) => i.name.toLowerCase().includes('chicken') || i.name.toLowerCase().includes('chop'));
+    if (anyChicken) return anyChicken;
+    if (itemsWithImages.length > 0) return itemsWithImages[0];
+    return null;
   })();
+  const heroImage = heroItem?.imageUrl || 'https://iheartrecipes.com/wp-content/uploads/2018/03/friedchicken6-1-scaled.jpg';
+  const heroItemId = heroItem?._id;
+
+  // Featured dishes — exclude the hero item so no image repeats
+  const featuredDishes = allItems.filter((i: any) => i._id !== heroItemId).slice(0, 6);
+
+  // Food gallery — exclude hero + featured items so every image is unique
+  const featuredIds = new Set(featuredDishes.map((i: any) => i._id));
+  const galleryItems = itemsWithImages.filter((i: any) => i._id !== heroItemId && !featuredIds.has(i._id)).slice(0, 8);
 
   return (
     <div>
@@ -355,10 +363,10 @@ export default function HomeContent({ initialData }: HomeContentProps) {
       {/* ════════════════════════════════════════════════
           FOOD GALLERY — Instagram-style grid
           ════════════════════════════════════════════════ */}
-      {itemsWithImages.length > 0 && (
+      {galleryItems.length > 0 && (
         <section className="py-0 bg-white">
           <div className="grid grid-cols-4 md:grid-cols-8">
-            {itemsWithImages.slice(0, 8).map((item: any, idx: number) => (
+            {galleryItems.map((item: any, idx: number) => (
               <div key={idx} tabIndex={0} className="aspect-square overflow-hidden relative group">
                 <Image
                   src={item.imageUrl}
