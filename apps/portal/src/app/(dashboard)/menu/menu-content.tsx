@@ -37,7 +37,7 @@ const ALCOHOL_TYPES = ['beer', 'wine', 'spirits'];
 type ItemType = (typeof ITEM_TYPES)[number]['value'];
 
 export default function MenuPage() {
-  const { tenantId } = useTenant();
+  const { tenant, tenantId } = useTenant();
 
   const categories = useQuery(
     api.menu.queries.getCategories,
@@ -138,6 +138,7 @@ export default function MenuPage() {
     const isSpecial = form.get('isSpecial') === 'on';
     const availableFromStr = form.get('availableFrom') as string;
     const availableToStr = form.get('availableTo') as string;
+    const stationValue = (form.get('station') as string) || undefined;
 
     // Upload image if selected
     let imageStorageId: Id<'_storage'> | undefined;
@@ -176,6 +177,7 @@ export default function MenuPage() {
           prepTimeMinutes: form.get('prepTime')
             ? parseInt(form.get('prepTime') as string)
             : undefined,
+          station: stationValue,
           ...(imageStorageId ? { imageStorageId } : {}),
         });
         toast.success('Item updated');
@@ -202,6 +204,7 @@ export default function MenuPage() {
           prepTimeMinutes: form.get('prepTime')
             ? parseInt(form.get('prepTime') as string)
             : undefined,
+          station: stationValue,
           ...(imageStorageId ? { imageStorageId } : {}),
         });
         toast.success('Item created');
@@ -712,6 +715,25 @@ export default function MenuPage() {
                 </select>
               </div>
             </div>
+            {/* KDS Station */}
+            {(tenant?.kdsSettings?.stations ?? []).length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="item-station">KDS Station</Label>
+                <select
+                  id="item-station"
+                  name="station"
+                  defaultValue={editingItem?.station ?? ''}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">None (all stations)</option>
+                  {(tenant?.kdsSettings?.stations ?? []).map((s: string) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="item-prep">Prep Time (min)</Label>

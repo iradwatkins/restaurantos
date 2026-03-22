@@ -31,7 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from '@restaurantos/ui';
-import { Plus, ShoppingBag, CreditCard, DollarSign, Send, Wine, X, Tag, Ban, Gift, Printer, Loader2, CheckCircle2, AlertCircle, RefreshCw, Star, Truck } from 'lucide-react';
+import { Plus, ShoppingBag, CreditCard, DollarSign, Send, Wine, X, Tag, Ban, Gift, Printer, Loader2, CheckCircle2, AlertCircle, RefreshCw, Star, Truck, Flame } from 'lucide-react';
 import { toast } from 'sonner';
 import { CashTender } from '@/components/cash-tender';
 import { ConnectionBadge } from '@/components/connection-badge';
@@ -76,6 +76,7 @@ interface CartItem {
   modifiers?: { name: string; priceAdjustment: number }[];
   specialInstructions?: string;
   lineTotal: number;
+  course?: number;
 }
 
 export default function OrdersPage() {
@@ -180,6 +181,7 @@ export default function OrdersPage() {
   const createOrder = useMutation(api.orders.mutations.create);
   const updateOrderStatus = useMutation(api.orders.mutations.updateStatus);
   const recordPayment = useMutation(api.orders.mutations.recordPayment);
+  const fireNextCourse = useMutation(api.kds.mutations.fireNextCourse);
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
@@ -292,6 +294,7 @@ export default function OrdersPage() {
           quantity: 1,
           unitPrice: item.price,
           lineTotal: item.price,
+          course: 1,
         },
       ];
     });
@@ -299,6 +302,12 @@ export default function OrdersPage() {
 
   function removeFromCart(menuItemId: string) {
     setCart((prev) => prev.filter((c) => c.menuItemId !== menuItemId));
+  }
+
+  function setCartItemCourse(menuItemId: string, course: number) {
+    setCart((prev) =>
+      prev.map((c) => (c.menuItemId === menuItemId ? { ...c, course } : c))
+    );
   }
 
   const subtotal = cart.reduce((sum, item) => sum + item.lineTotal, 0);
@@ -354,7 +363,10 @@ export default function OrdersPage() {
         source: 'dine_in',
         tableId: selectedTable as Id<"tables"> || undefined,
         tableName: tables?.find((t) => t._id === selectedTable)?.name,
-        items: cart,
+        items: cart.map((item) => ({
+          ...item,
+          course: item.course ?? 1,
+        })),
         subtotal,
         tax,
         total,
@@ -764,12 +776,25 @@ export default function OrdersPage() {
                 ) : (
                   <>
                     {cart.map((item) => (
-                      <div key={item.menuItemId} className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{item.quantity}x</span>
-                          <span>{item.name}</span>
+                      <div key={item.menuItemId} className="flex items-center justify-between text-sm gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-medium shrink-0">{item.quantity}x</span>
+                          <span className="truncate">{item.name}</span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
+                          <select
+                            value={item.course ?? 1}
+                            onChange={(e) =>
+                              setCartItemCourse(item.menuItemId, parseInt(e.target.value))
+                            }
+                            className="h-7 min-w-[44px] rounded border border-input bg-background px-1 text-xs"
+                            aria-label={`Course for ${item.name}`}
+                            title="Course number"
+                          >
+                            <option value={1}>C1</option>
+                            <option value={2}>C2</option>
+                            <option value={3}>C3</option>
+                          </select>
                           <span>${(item.lineTotal / 100).toFixed(2)}</span>
                           <button
                             onClick={() => removeFromCart(item.menuItemId)}
@@ -894,6 +919,12 @@ export default function OrdersPage() {
                             <Send className="h-3 w-3 mr-1" />
                             Kitchen
                           </Button>
+                        )}
+                        {isModifiable && order.status !== 'open' && (
+                          <FireCourseButton
+                            orderId={order._id}
+                            onFire={fireNextCourse}
+                          />
                         )}
                         {isModifiable && (
                           <Button
@@ -1489,5 +1520,48 @@ function PaymentLoyaltyPreview({
         {customerName} will earn <span className="font-semibold">{pointsToEarn} points</span> from this order
       </span>
     </div>
+  );
+}
+
+/**
+ * Fire Next Course button — shows pending course count and fires next course on click.
+ * Only renders when there are pending courses to fire.
+ */
+function FireCourseButton({
+  orderId,
+  onFire,
+}: {
+  orderId: Id<'orders'>;
+  onFire: (args: { orderId: Id<'orders'> }) => Promise<{ firedCourse: number; remainingCourses: number[] }>;
+}) {
+  const pendingCourses = useQuery(api.kds.queries.getPendingCourses, { orderId });
+  const [firing, setFiring] = useState(false);
+
+  if (!pendingCourses || pendingCourses.pendingCourses.length === 0) return null;
+
+  async function handleFire() {
+    setFiring(true);
+    try {
+      const result = await onFire({ orderId });
+      toast.success(`Course ${result.firedCourse} fired to kitchen`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to fire course';
+      toast.error(message);
+    } finally {
+      setFiring(false);
+    }
+  }
+
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={handleFire}
+      disabled={firing}
+      className="text-orange-600 border-orange-300 hover:bg-orange-50"
+    >
+      <Flame className="h-3 w-3 mr-1" />
+      Fire C{pendingCourses.pendingCourses[0]} ({pendingCourses.pendingCourses.length})
+    </Button>
   );
 }

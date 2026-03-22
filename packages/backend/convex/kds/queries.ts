@@ -42,6 +42,32 @@ export const getRecallQueue = query({
   },
 });
 
+export const getPendingCourses = query({
+  args: { orderId: v.id("orders") },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) return null;
+
+    const firedCourses = order.firedCourses ?? [1];
+
+    const allCourses = [
+      ...new Set(
+        order.items.map((i: { course?: number }) => i.course ?? 1)
+      ),
+    ].sort((a, b) => a - b);
+
+    const pendingCourses = allCourses.filter(
+      (c) => !firedCourses.includes(c)
+    );
+
+    return {
+      firedCourses,
+      pendingCourses,
+      totalCourses: allCourses.length,
+    };
+  },
+});
+
 export const getTicketByOrder = query({
   args: { orderId: v.id("orders") },
   handler: async (ctx, args) => {

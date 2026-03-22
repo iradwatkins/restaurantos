@@ -204,6 +204,31 @@ export default defineSchema({
     accountingAutoSyncEnabled: v.optional(v.boolean()),
     accountingLastSyncTime: v.optional(v.number()),
 
+    // Daypart boundaries for reporting (custom per-tenant)
+    daypartConfig: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          startHour: v.number(),
+          endHour: v.number(),
+        })
+      )
+    ),
+
+    // KDS configuration
+    kdsSettings: v.optional(
+      v.object({
+        stations: v.optional(v.array(v.string())),
+        audioEnabled: v.optional(v.boolean()),
+        audioVolume: v.optional(v.number()),
+        newTicketSound: v.optional(v.string()),
+        warningSound: v.optional(v.string()),
+        overdueSound: v.optional(v.string()),
+        warningThresholdMinutes: v.optional(v.number()),
+        overdueThresholdMinutes: v.optional(v.number()),
+      })
+    ),
+
     createdAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
   })
@@ -390,6 +415,8 @@ export default defineSchema({
     is86d: v.optional(v.boolean()), // out of stock across all platforms
     sortOrder: v.optional(v.number()),
     prepTimeMinutes: v.optional(v.number()),
+    foodCostCents: v.optional(v.number()), // cost to prepare this item in cents
+    station: v.optional(v.string()), // KDS station assignment ("grill", "fry", "cold", "bar", etc.)
 
     // Item type (food vs alcohol categories)
     type: v.optional(
@@ -530,6 +557,7 @@ export default defineSchema({
         isVoided: v.optional(v.boolean()),
         voidedBy: v.optional(v.string()),
         voidReason: v.optional(v.string()),
+        course: v.optional(v.number()), // course number, default 1
       })
     ),
 
@@ -601,6 +629,9 @@ export default defineSchema({
     scheduledPickupTime: v.optional(v.number()), // customer-selected future pickup time
     estimatedReadyAt: v.optional(v.number()), // calculated from prep times
 
+    // Course firing
+    firedCourses: v.optional(v.array(v.number())), // tracks which courses have been fired to KDS
+
     // Timestamps
     createdAt: v.number(),
     sentToKitchenAt: v.optional(v.number()),
@@ -671,8 +702,10 @@ export default defineSchema({
         specialInstructions: v.optional(v.string()),
         station: v.optional(v.string()), // grill, fry, cold, expo
         isBumped: v.optional(v.boolean()),
+        course: v.optional(v.number()), // course number
       })
     ),
+    courseNumber: v.optional(v.number()), // which course this ticket represents
     tableName: v.optional(v.string()),
     customerName: v.optional(v.string()),
     estimatedPickupTime: v.optional(v.number()),

@@ -3,6 +3,31 @@ import { v } from "convex/values";
 import { requireTenantAccess } from "../lib/tenant_auth";
 import { Doc, Id } from "../_generated/dataModel";
 
+// ── Shared helper: compute median of a number array ──
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0
+    ? sorted[mid]!
+    : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
+}
+
+// ── Default daypart boundaries ──
+interface DaypartConfig {
+  name: string;
+  startHour: number;
+  endHour: number;
+}
+
+const DEFAULT_DAYPARTS: DaypartConfig[] = [
+  { name: "Breakfast", startHour: 6, endHour: 11 },
+  { name: "Lunch", startHour: 11, endHour: 15 },
+  { name: "Happy Hour", startHour: 15, endHour: 17 },
+  { name: "Dinner", startHour: 17, endHour: 21 },
+  { name: "Late Night", startHour: 21, endHour: 6 },
+];
+
 // ── Shared helper: fetch orders in a date range for a tenant ──
 async function fetchOrdersInRange(
   ctx: { db: any },
@@ -628,6 +653,421 @@ export const getDailySales = query({
     }
 
     return dailyData;
+  },
+});
+
+// ============================================================
+// 12. getMenuEngineeringReport — Menu Engineering (BCG matrix)
+// ============================================================
+export const getMenuEngineeringReport = query({
+  args: {
+    tenantId: v.id("tenants"),
+    startDate: v.number(),
+    endDate: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireTenantAccess(ctx);
+    if (user.tenantId !== args.tenantId) throw new Error("Forbidden");
+
+    const eligible = revenueOrders(
+      await fetchOrdersInRange(ctx, args.tenantId, args.startDate, args.endDate)
+    );
+
+    // Aggregate per menuItemId
+    const itemAgg: Record<
+      string,
+      { menuItemId: string; name: string; quantitySold: number; revenue: number }
+    > = {};
+
+    for (const o of eligible) {
+      for (const item of o.items) {
+        if (item.isVoided) continue;
+        const key = item.menuItemId as string;
+        if (!itemAgg[key]) {
+          itemAgg[key] = { menuItemId: key, name: item.name, quantitySold: 0, revenue: 0 };
+        }
+        itemAgg[key]!.quantitySold += item.quantity;
+        itemAgg[key]!.revenue += item.lineTotal;
+      }
+    }
+
+    // Look up each menuItem for foodCostCents and price
+    const menuItemIds = Object.keys(itemAgg);
+    const menuItemLookup = new Map<string, { foodCostCents: number; price: number }>();
+    for (const id of menuItemIds) {
+      const menuItem = await ctx.db.get(id as Id<"menuItems">);
+      if (menuItem) {
+        menuItemLookup.set(id, {
+          foodCostCents: menuItem.foodCostCents ?? 0,
+          price: menuItem.price,
+        });
+      }
+    }
+
+    // Build enriched items
+    const enrichedItems = menuItemIds.map((id) => {
+      const agg = itemAgg[id]!;
+      const lookup = menuItemLookup.get(id);
+      const foodCostCents = lookup?.foodCostCents ?? 0;
+      const price = lookup?.price ?? 0;
+      const costNotSet = foodCostCents === 0 && (lookup === undefined || lookup.foodCostCents === 0);
+      const foodCostPercent = price > 0 ? Math.round((foodCostCents / price) * 100) : 0;
+      const contributionMarginCents = price - foodCostCents;
+      const totalContributionMarginCents = contributionMarginCents * agg.quantitySold;
+
+      return {
+        menuItemId: agg.menuItemId,
+        name: agg.name,
+        quantitySold: agg.quantitySold,
+        revenue: agg.revenue,
+        foodCostCents,
+        costNotSet,
+        foodCostPercent,
+        contributionMarginCents,
+        totalContributionMarginCents,
+        classification: "" as "Star" | "Puzzle" | "Plowhorse" | "Dog",
+      };
+    });
+
+    // Compute medians
+    const popularityValues = enrichedItems.map((i) => i.quantitySold);
+    const marginValues = enrichedItems.map((i) => i.contributionMarginCents);
+    const medianPopularity = median(popularityValues);
+    const medianMargin = median(marginValues);
+
+    // Classify
+    for (const item of enrichedItems) {
+      const highPop = item.quantitySold >= medianPopularity;
+      const highMargin = item.contributionMarginCents >= medianMargin;
+      if (highPop && highMargin) item.classification = "Star";
+      else if (!highPop && highMargin) item.classification = "Puzzle";
+      else if (highPop && !highMargin) item.classification = "Plowhorse";
+      else item.classification = "Dog";
+    }
+
+    // Sort by revenue descending
+    enrichedItems.sort((a, b) => b.revenue - a.revenue);
+
+    return {
+      items: enrichedItems,
+      medianPopularity,
+      medianMargin,
+    };
+  },
+});
+
+// ============================================================
+// 13. getDaypartAnalysis — Revenue & mix by time-of-day segments
+// ============================================================
+export const getDaypartAnalysis = query({
+  args: {
+    tenantId: v.id("tenants"),
+    startDate: v.number(),
+    endDate: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireTenantAccess(ctx);
+    if (user.tenantId !== args.tenantId) throw new Error("Forbidden");
+
+    // Look up tenant for custom daypart config
+    const tenant = await ctx.db.get(args.tenantId);
+    const dayparts: DaypartConfig[] =
+      tenant?.daypartConfig && tenant.daypartConfig.length > 0
+        ? (tenant.daypartConfig as DaypartConfig[])
+        : DEFAULT_DAYPARTS;
+
+    function getDaypartName(hour: number): string {
+      for (const dp of dayparts) {
+        if (dp.startHour > dp.endHour) {
+          // Wraps midnight (e.g., Late Night 21-6)
+          if (hour >= dp.startHour || hour < dp.endHour) return dp.name;
+        } else {
+          if (hour >= dp.startHour && hour < dp.endHour) return dp.name;
+        }
+      }
+      return "Other";
+    }
+
+    function analyzeDayparts(orders: Doc<"orders">[]) {
+      const eligible = revenueOrders(orders);
+      const dpMap: Record<
+        string,
+        {
+          name: string;
+          revenue: number;
+          orderCount: number;
+          itemCounts: Record<string, { name: string; quantity: number }>;
+        }
+      > = {};
+
+      // Initialize all dayparts
+      for (const dp of dayparts) {
+        dpMap[dp.name] = { name: dp.name, revenue: 0, orderCount: 0, itemCounts: {} };
+      }
+
+      for (const o of eligible) {
+        const hour = new Date(o.createdAt).getHours();
+        const dpName = getDaypartName(hour);
+        if (!dpMap[dpName]) {
+          dpMap[dpName] = { name: dpName, revenue: 0, orderCount: 0, itemCounts: {} };
+        }
+        dpMap[dpName]!.revenue += o.total;
+        dpMap[dpName]!.orderCount += 1;
+
+        for (const item of o.items) {
+          if (item.isVoided) continue;
+          const ic = dpMap[dpName]!.itemCounts;
+          if (!ic[item.name]) {
+            ic[item.name] = { name: item.name, quantity: 0 };
+          }
+          ic[item.name]!.quantity += item.quantity;
+        }
+      }
+
+      return Object.values(dpMap).map((dp) => {
+        const top5Items = Object.values(dp.itemCounts)
+          .sort((a, b) => b.quantity - a.quantity)
+          .slice(0, 5)
+          .map((i) => ({ name: i.name, quantity: i.quantity }));
+
+        return {
+          name: dp.name,
+          revenue: dp.revenue,
+          orderCount: dp.orderCount,
+          avgTicket: dp.orderCount > 0 ? Math.round(dp.revenue / dp.orderCount) : 0,
+          top5Items,
+        };
+      });
+    }
+
+    // Current period
+    const currentOrders = await fetchOrdersInRange(
+      ctx, args.tenantId, args.startDate, args.endDate
+    );
+
+    // Previous period (same duration offset backward)
+    const periodLength = args.endDate - args.startDate;
+    const prevStart = args.startDate - periodLength;
+    const prevEnd = args.startDate;
+    const prevOrders = await fetchOrdersInRange(
+      ctx, args.tenantId, prevStart, prevEnd
+    );
+
+    return {
+      dayparts: analyzeDayparts(currentOrders),
+      previousDayparts: analyzeDayparts(prevOrders),
+    };
+  },
+});
+
+// ============================================================
+// 14. getServerPerformanceReport — Extended server metrics
+// ============================================================
+export const getServerPerformanceReport = query({
+  args: {
+    tenantId: v.id("tenants"),
+    startDate: v.number(),
+    endDate: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireTenantAccess(ctx);
+    if (user.tenantId !== args.tenantId) throw new Error("Forbidden");
+
+    const eligible = revenueOrders(
+      await fetchOrdersInRange(ctx, args.tenantId, args.startDate, args.endDate)
+    );
+
+    const serverMap: Record<
+      string,
+      {
+        serverId: string;
+        name: string;
+        orderCount: number;
+        totalRevenue: number;
+        totalTips: number;
+        totalModifiers: number;
+        totalItems: number;
+        totalTurnTimeMs: number;
+        dineInCount: number;
+      }
+    > = {};
+
+    for (const o of eligible) {
+      const sid = o.serverId;
+      if (!sid) continue;
+      const sidStr = sid as string;
+
+      if (!serverMap[sidStr]) {
+        serverMap[sidStr] = {
+          serverId: sidStr,
+          name: o.serverName ?? "Unknown",
+          orderCount: 0,
+          totalRevenue: 0,
+          totalTips: 0,
+          totalModifiers: 0,
+          totalItems: 0,
+          totalTurnTimeMs: 0,
+          dineInCount: 0,
+        };
+      }
+
+      const entry = serverMap[sidStr]!;
+      entry.orderCount += 1;
+      entry.totalRevenue += o.total;
+      entry.totalTips += (o.tipAmount ?? o.tip ?? 0);
+
+      for (const item of o.items) {
+        if (item.isVoided) continue;
+        entry.totalItems += item.quantity;
+        entry.totalModifiers += (item.modifiers?.length ?? 0) * item.quantity;
+      }
+
+      // Table turn time: dine-in orders with completedAt
+      if (o.source === "dine_in" && o.completedAt) {
+        entry.totalTurnTimeMs += (o.completedAt - o.createdAt);
+        entry.dineInCount += 1;
+      }
+    }
+
+    const results = Object.values(serverMap)
+      .map((s) => ({
+        serverId: s.serverId,
+        name: s.name,
+        orderCount: s.orderCount,
+        totalRevenue: s.totalRevenue,
+        totalTips: s.totalTips,
+        avgOrderValue: s.orderCount > 0 ? Math.round(s.totalRevenue / s.orderCount) : 0,
+        totalModifiers: s.totalModifiers,
+        totalItems: s.totalItems,
+        upsellRate: s.totalItems > 0
+          ? Math.round((s.totalModifiers / s.totalItems) * 10000) / 10000
+          : 0,
+        tipPercent: s.totalRevenue > 0
+          ? Math.round((s.totalTips / s.totalRevenue) * 10000) / 100
+          : 0,
+        avgTableTurnMinutes: s.dineInCount > 0
+          ? Math.round(s.totalTurnTimeMs / s.dineInCount / 60000)
+          : null,
+      }))
+      .sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+    // Assign rank
+    return results.map((s, idx) => ({ ...s, rank: idx + 1 }));
+  },
+});
+
+// ============================================================
+// 15. getWasteReport — Voids, comps, discounts breakdown
+// ============================================================
+export const getWasteReport = query({
+  args: {
+    tenantId: v.id("tenants"),
+    startDate: v.number(),
+    endDate: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireTenantAccess(ctx);
+    if (user.tenantId !== args.tenantId) throw new Error("Forbidden");
+
+    // Fetch ALL orders (not just revenue-eligible — waste includes cancelled/voided)
+    const allOrders = await fetchOrdersInRange(
+      ctx, args.tenantId, args.startDate, args.endDate
+    );
+
+    let voidsCents = 0;
+    let compsCents = 0;
+    let discountsCents = 0;
+
+    const voidDetails: Array<{
+      name: string;
+      quantity: number;
+      valueCents: number;
+      reason: string;
+      voidedBy: string;
+      orderNumber: number;
+    }> = [];
+
+    // For top wasted items aggregation
+    const voidItemAgg: Record<
+      string,
+      { name: string; quantity: number; valueCents: number }
+    > = {};
+
+    // Daily trend buckets
+    const dailyBuckets: Record<
+      string,
+      { date: string; voidsCents: number; compsCents: number; discountsCents: number }
+    > = {};
+
+    for (const o of allOrders) {
+      const dateKey = new Date(o.createdAt).toISOString().split("T")[0]!;
+      if (!dailyBuckets[dateKey]) {
+        dailyBuckets[dateKey] = { date: dateKey, voidsCents: 0, compsCents: 0, discountsCents: 0 };
+      }
+      const bucket = dailyBuckets[dateKey]!;
+
+      // 1. Voids — items with isVoided === true
+      for (const item of o.items) {
+        if (item.isVoided === true) {
+          const itemValue = item.lineTotal;
+          voidsCents += itemValue;
+          bucket.voidsCents += itemValue;
+
+          voidDetails.push({
+            name: item.name,
+            quantity: item.quantity,
+            valueCents: itemValue,
+            reason: item.voidReason ?? "",
+            voidedBy: item.voidedBy ?? "",
+            orderNumber: o.orderNumber,
+          });
+
+          // Aggregate for top wasted items
+          if (!voidItemAgg[item.name]) {
+            voidItemAgg[item.name] = { name: item.name, quantity: 0, valueCents: 0 };
+          }
+          voidItemAgg[item.name]!.quantity += item.quantity;
+          voidItemAgg[item.name]!.valueCents += itemValue;
+        }
+      }
+
+      // 2. Comps — orders where isComped === true
+      if (o.isComped === true) {
+        const compAmount = o.discountAmount ?? 0;
+        compsCents += compAmount;
+        bucket.compsCents += compAmount;
+        continue; // comps are separate from discounts
+      }
+
+      // 3. Discounts — orders with discountAmount > 0 and not comped
+      if ((o.discountAmount ?? 0) > 0 && o.isComped !== true) {
+        const discountAmount = o.discountAmount!;
+        discountsCents += discountAmount;
+        bucket.discountsCents += discountAmount;
+      }
+    }
+
+    // Top 10 wasted items by value
+    const topWastedItems = Object.values(voidItemAgg)
+      .sort((a, b) => b.valueCents - a.valueCents)
+      .slice(0, 10);
+
+    // Daily trend sorted by date
+    const dailyTrend = Object.values(dailyBuckets).sort((a, b) =>
+      a.date.localeCompare(b.date)
+    );
+
+    return {
+      totalWaste: {
+        voidsCents,
+        compsCents,
+        discountsCents,
+        totalCents: voidsCents + compsCents + discountsCents,
+      },
+      topWastedItems,
+      dailyTrend,
+      voidDetails,
+    };
   },
 });
 

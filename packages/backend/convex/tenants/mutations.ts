@@ -922,3 +922,33 @@ export const updateAccountingCredentials = mutation({
     await ctx.db.patch(args.tenantId, updates);
   },
 });
+
+export const updateKdsSettings = mutation({
+  args: {
+    tenantId: v.id("tenants"),
+    kdsSettings: v.object({
+      stations: v.optional(v.array(v.string())),
+      audioEnabled: v.optional(v.boolean()),
+      audioVolume: v.optional(v.number()),
+      newTicketSound: v.optional(v.string()),
+      warningSound: v.optional(v.string()),
+      overdueSound: v.optional(v.string()),
+      warningThresholdMinutes: v.optional(v.number()),
+      overdueThresholdMinutes: v.optional(v.number()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireTenantAccess(ctx);
+    if (user.tenantId !== args.tenantId) {
+      throw new Error("Forbidden");
+    }
+
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant) throw new Error("Tenant not found");
+
+    await ctx.db.patch(args.tenantId, {
+      kdsSettings: args.kdsSettings,
+      updatedAt: Date.now(),
+    });
+  },
+});

@@ -32,6 +32,7 @@ export function ItemFormDialog({
   selectedImage,
   imageInputRef,
   handleImageSelect,
+  stations = [],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -41,6 +42,7 @@ export function ItemFormDialog({
   selectedImage: File | null;
   imageInputRef: RefObject<HTMLInputElement | null>;
   handleImageSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  stations?: string[];
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -99,6 +101,26 @@ export function ItemFormDialog({
               </select>
             </div>
           </div>
+          {/* KDS Station */}
+          {stations.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="item-station">KDS Station</Label>
+              <select
+                id="item-station"
+                name="station"
+                defaultValue={editingItem?.station ?? ''}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">None (all stations)</option>
+                {stations.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="item-prep">Prep Time (min)</Label>

@@ -171,25 +171,45 @@ export const updateStatus = mutation({
           grubhub: "Grubhub",
         };
 
-        await ctx.db.insert("kdsTickets", {
-          tenantId: order.tenantId,
-          orderId: args.orderId,
-          orderNumber: order.orderNumber,
-          source: order.source,
-          sourceBadge: SOURCE_LABELS[order.source] ?? order.source,
-          status: "new",
-          items: order.items.map((item) => ({
-            name: item.name,
-            quantity: item.quantity,
-            modifiers: item.modifiers?.map((m) => m.name),
-            specialInstructions: item.specialInstructions,
-            isBumped: false,
-          })),
-          tableName: order.tableName,
-          customerName: order.customerName,
-          estimatedPickupTime: order.estimatedPickupTime,
-          receivedAt: Date.now(),
-        });
+        // Only create a ticket for course 1 items (undefined course defaults to 1)
+        const course1Items = order.items.filter(
+          (item) => (item.course ?? 1) === 1
+        );
+
+        const ticketItems = await Promise.all(
+          course1Items.map(async (item) => {
+            const menuItem = await ctx.db.get(item.menuItemId);
+            return {
+              name: item.name,
+              quantity: item.quantity,
+              modifiers: item.modifiers?.map((m: { name: string }) => m.name),
+              specialInstructions: item.specialInstructions,
+              station: menuItem?.station,
+              course: item.course ?? 1,
+              isBumped: false,
+            };
+          })
+        );
+
+        if (ticketItems.length > 0) {
+          await ctx.db.insert("kdsTickets", {
+            tenantId: order.tenantId,
+            orderId: args.orderId,
+            orderNumber: order.orderNumber,
+            source: order.source,
+            sourceBadge: SOURCE_LABELS[order.source] ?? order.source,
+            status: "new",
+            items: ticketItems,
+            courseNumber: 1,
+            tableName: order.tableName,
+            customerName: order.customerName,
+            estimatedPickupTime: order.estimatedPickupTime,
+            receivedAt: Date.now(),
+          });
+        }
+
+        // Mark course 1 as fired on the order
+        updates.firedCourses = [1];
       }
     }
     if (args.status === "completed") {

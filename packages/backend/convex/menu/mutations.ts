@@ -108,6 +108,7 @@ export const createItem = mutation({
     isSpecial: v.optional(v.boolean()),
     availableFrom: v.optional(v.number()),
     availableTo: v.optional(v.number()),
+    station: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const currentUser = await requireTenantAccess(ctx);
@@ -138,6 +139,7 @@ export const createItem = mutation({
       isSpecial: args.isSpecial ?? false,
       availableFrom: args.availableFrom,
       availableTo: args.availableTo,
+      station: args.station,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
@@ -168,6 +170,7 @@ export const updateItem = mutation({
     isSpecial: v.optional(v.boolean()),
     availableFrom: v.optional(v.number()),
     availableTo: v.optional(v.number()),
+    station: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;

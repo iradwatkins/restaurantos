@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@restaurantos/backend';
 import { useTenant } from '@/hooks/use-tenant';
+import { useKdsAudio } from '@/hooks/use-kds-audio';
 import { Button, Badge } from '@restaurantos/ui';
 import type { Id } from '@restaurantos/backend/dataModel';
-import { Check, RotateCcw, Clock, ChefHat } from 'lucide-react';
+import { Check, RotateCcw, Clock, ChefHat, Volume2, VolumeX } from 'lucide-react';
 import { toast } from 'sonner';
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -61,7 +62,7 @@ function TicketTimer({ receivedAt }: { receivedAt: number }) {
 }
 
 export default function KDSPage() {
-  const { tenantId } = useTenant();
+  const { tenant, tenantId } = useTenant();
 
   const tickets = useQuery(
     api.kds.queries.getActiveTickets,
@@ -77,6 +78,68 @@ export default function KDSPage() {
   const recallTicket = useMutation(api.kds.mutations.recallTicket);
 
   const [showRecall, setShowRecall] = useState(false);
+  const [selectedStation, setSelectedStation] = useState<string | null>(null);
+
+  // Audio alerts
+  const kdsSettings = tenant?.kdsSettings;
+  const warningThreshold = kdsSettings?.warningThresholdMinutes ?? 5;
+  const overdueThreshold = kdsSettings?.overdueThresholdMinutes ?? 10;
+
+  const { muted, setMuted, playNewTicketTone, playWarningTone, playOverdueTone } = useKdsAudio({
+    enabled: kdsSettings?.audioEnabled ?? true,
+    volume: kdsSettings?.audioVolume ?? 70,
+  });
+
+  // Track previous ticket count for new ticket detection
+  const prevTicketCountRef = useRef<number>(0);
+  // Track warned/overdue tickets to only fire once per ticket
+  const warnedTicketsRef = useRef<Set<string>>(new Set());
+  const overdueTicketsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!tickets) return;
+
+    // New ticket detection
+    if (tickets.length > prevTicketCountRef.current && prevTicketCountRef.current > 0) {
+      playNewTicketTone();
+    }
+    prevTicketCountRef.current = tickets.length;
+
+    // Warning / overdue detection
+    const now = Date.now();
+    for (const ticket of tickets) {
+      const elapsedMinutes = (now - ticket.receivedAt) / 60000;
+      const ticketId = ticket._id;
+
+      if (
+        elapsedMinutes >= overdueThreshold &&
+        !overdueTicketsRef.current.has(ticketId)
+      ) {
+        overdueTicketsRef.current.add(ticketId);
+        playOverdueTone();
+      } else if (
+        elapsedMinutes >= warningThreshold &&
+        !warnedTicketsRef.current.has(ticketId)
+      ) {
+        warnedTicketsRef.current.add(ticketId);
+        playWarningTone();
+      }
+    }
+  }, [tickets, warningThreshold, overdueThreshold, playNewTicketTone, playWarningTone, playOverdueTone]);
+
+  // Station filtering
+  const stations = kdsSettings?.stations ?? [];
+
+  const filteredTickets = selectedStation
+    ? tickets
+        ?.map((t) => ({
+          ...t,
+          items: t.items.filter(
+            (i: { station?: string }) => i.station === selectedStation
+          ),
+        }))
+        .filter((t) => t.items.length > 0)
+    : tickets;
 
   if (!tenantId) {
     return <div role="status" aria-live="polite" className="p-6 text-muted-foreground">Loading...</div>;
@@ -86,16 +149,18 @@ export default function KDSPage() {
     try {
       const result = await bumpTicket({ ticketId });
       toast.success(`Order #${result.orderNumber} bumped`);
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to bump ticket';
+      toast.error(message);
     }
   }
 
   async function handleBumpItem(ticketId: Id<"kdsTickets">, itemIndex: number) {
     try {
       await bumpItem({ ticketId, itemIndex });
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to bump item';
+      toast.error(message);
     }
   }
 
@@ -103,8 +168,9 @@ export default function KDSPage() {
     try {
       await recallTicket({ ticketId });
       toast.success('Ticket recalled');
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to recall ticket';
+      toast.error(message);
     }
   }
 
@@ -117,15 +183,57 @@ export default function KDSPage() {
           <h1 className="text-2xl font-bold tracking-tight">Kitchen Display</h1>
           <Badge variant="outline">{tickets?.length ?? 0} active</Badge>
         </div>
-        <Button
-          variant={showRecall ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setShowRecall(!showRecall)}
-        >
-          <RotateCcw className="mr-2 h-4 w-4" />
-          Recall ({recallQueue?.length ?? 0})
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Audio mute toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setMuted(!muted)}
+            aria-label={muted ? 'Unmute audio alerts' : 'Mute audio alerts'}
+            title={muted ? 'Unmute audio alerts' : 'Mute audio alerts'}
+          >
+            {muted ? (
+              <VolumeX className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <Volume2 className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            variant={showRecall ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setShowRecall(!showRecall)}
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Recall ({recallQueue?.length ?? 0})
+          </Button>
+        </div>
       </div>
+
+      {/* Station Selector */}
+      {stations.length > 0 && (
+        <div className="flex gap-2 flex-wrap" role="group" aria-label="Filter by station">
+          <Button
+            variant={selectedStation === null ? 'default' : 'outline'}
+            size="sm"
+            className="h-10 px-4 min-w-[80px]"
+            onClick={() => setSelectedStation(null)}
+          >
+            All
+          </Button>
+          {stations.map((station) => (
+            <Button
+              key={station}
+              variant={selectedStation === station ? 'default' : 'outline'}
+              size="sm"
+              className="h-10 px-4 min-w-[80px]"
+              onClick={() => setSelectedStation(station)}
+            >
+              {station}
+            </Button>
+          ))}
+        </div>
+      )}
 
       {/* Recall Queue */}
       {showRecall && recallQueue && recallQueue.length > 0 && (
@@ -148,7 +256,7 @@ export default function KDSPage() {
 
       {/* Ticket Grid */}
       <div aria-live="polite" aria-relevant="additions" className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {tickets?.map((ticket) => (
+        {filteredTickets?.map((ticket) => (
           <div
             key={ticket._id}
             className={`border-2 rounded-lg overflow-hidden ${
@@ -166,6 +274,12 @@ export default function KDSPage() {
                 >
                   {ticket.sourceBadge}
                 </span>
+                {(ticket as { courseNumber?: number }).courseNumber !== undefined &&
+                  (ticket as { courseNumber?: number }).courseNumber! > 1 && (
+                    <Badge className="bg-purple-600 text-white text-xs">
+                      Course {(ticket as { courseNumber?: number }).courseNumber}
+                    </Badge>
+                  )}
               </div>
               <TicketTimer receivedAt={ticket.receivedAt} />
             </div>
@@ -193,7 +307,7 @@ export default function KDSPage() {
 
             {/* Items */}
             <div className="p-3 space-y-2">
-              {ticket.items.map((item, idx) => (
+              {ticket.items.map((item: { name: string; quantity: number; isBumped?: boolean; modifiers?: string[]; specialInstructions?: string; station?: string; course?: number }, idx: number) => (
                 <button
                   key={idx}
                   onClick={() => handleBumpItem(ticket._id, idx)}
@@ -207,6 +321,16 @@ export default function KDSPage() {
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-lg">{item.quantity}x</span>
                     <span className="font-medium">{item.name}</span>
+                    {item.station && (
+                      <Badge variant="secondary" className="text-xs">
+                        {item.station}
+                      </Badge>
+                    )}
+                    {item.course !== undefined && item.course > 1 && (
+                      <Badge variant="outline" className="text-xs">
+                        C{item.course}
+                      </Badge>
+                    )}
                     {item.isBumped && <Check className="h-4 w-4 text-green-600 ml-auto" />}
                   </div>
                   {item.modifiers && item.modifiers.length > 0 && (
@@ -236,10 +360,12 @@ export default function KDSPage() {
           </div>
         ))}
 
-        {tickets?.length === 0 && (
+        {filteredTickets?.length === 0 && (
           <div className="col-span-full text-center py-20 text-muted-foreground">
             <ChefHat className="h-12 w-12 mx-auto mb-4 opacity-30" />
-            <p className="text-lg">No active tickets</p>
+            <p className="text-lg">
+              {selectedStation ? `No tickets for ${selectedStation}` : 'No active tickets'}
+            </p>
             <p className="text-sm">Orders will appear here in real-time</p>
           </div>
         )}

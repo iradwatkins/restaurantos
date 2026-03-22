@@ -1,5 +1,6 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
+import { Id } from "../_generated/dataModel";
 import { requireTenantAccess, assertTenantOwnership } from "../lib/tenant_auth";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -33,13 +34,20 @@ export const createTicket = mutation({
 
     if (existing) return existing._id;
 
-    const ticketItems = order.items.map((item) => ({
-      name: item.name,
-      quantity: item.quantity,
-      modifiers: item.modifiers?.map((m) => m.name),
-      specialInstructions: item.specialInstructions,
-      isBumped: false,
-    }));
+    const ticketItems = await Promise.all(
+      order.items.map(async (item) => {
+        const menuItem = await ctx.db.get(item.menuItemId);
+        return {
+          name: item.name,
+          quantity: item.quantity,
+          modifiers: item.modifiers?.map((m) => m.name),
+          specialInstructions: item.specialInstructions,
+          station: menuItem?.station,
+          course: item.course ?? 1,
+          isBumped: false,
+        };
+      })
+    );
 
     return await ctx.db.insert("kdsTickets", {
       tenantId: args.tenantId,
@@ -147,6 +155,89 @@ export const bumpItem = mutation({
         updatedAt: Date.now(),
       });
     }
+  },
+});
+
+export const fireNextCourse = mutation({
+  args: {
+    orderId: v.id("orders"),
+  },
+  handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+    assertTenantOwnership(order, currentUser.tenantId);
+
+    const firedCourses = order.firedCourses ?? [1];
+
+    // Collect all distinct course numbers from order items
+    const allCourses = [
+      ...new Set(order.items.map((i: { course?: number }) => i.course ?? 1)),
+    ].sort((a, b) => a - b);
+
+    // Find the next unfired course
+    const nextCourse = allCourses.find((c) => !firedCourses.includes(c));
+    if (nextCourse === undefined) {
+      throw new Error("All courses have been fired");
+    }
+
+    // Get items for the next course
+    const courseItems = order.items.filter(
+      (i: { course?: number }) => (i.course ?? 1) === nextCourse
+    );
+
+    // Look up menuItem for each to get station, build ticket items
+    const ticketItems = await Promise.all(
+      courseItems.map(async (item: { menuItemId: Id<"menuItems">; name: string; quantity: number; modifiers?: Array<{ name: string }>; specialInstructions?: string; course?: number }) => {
+        const menuItem = await ctx.db.get(item.menuItemId);
+        return {
+          name: item.name,
+          quantity: item.quantity,
+          modifiers: item.modifiers?.map((m) => m.name),
+          specialInstructions: item.specialInstructions,
+          station: menuItem?.station as string | undefined,
+          course: nextCourse,
+          isBumped: false,
+        };
+      })
+    );
+
+    const SOURCE_LABELS: Record<string, string> = {
+      dine_in: "Dine-In",
+      online: "Online",
+      doordash: "DoorDash",
+      ubereats: "Uber Eats",
+      grubhub: "Grubhub",
+    };
+
+    // Create KDS ticket for this course
+    await ctx.db.insert("kdsTickets", {
+      tenantId: order.tenantId,
+      orderId: args.orderId,
+      orderNumber: order.orderNumber,
+      source: order.source,
+      sourceBadge: SOURCE_LABELS[order.source] ?? order.source,
+      status: "new",
+      items: ticketItems,
+      courseNumber: nextCourse,
+      tableName: order.tableName,
+      customerName: order.customerName,
+      estimatedPickupTime: order.estimatedPickupTime,
+      receivedAt: Date.now(),
+    });
+
+    // Update order's firedCourses
+    const updatedFiredCourses = [...firedCourses, nextCourse];
+    await ctx.db.patch(args.orderId, {
+      firedCourses: updatedFiredCourses,
+      updatedAt: Date.now(),
+    });
+
+    const remainingCourses = allCourses.filter(
+      (c) => !updatedFiredCourses.includes(c)
+    );
+
+    return { firedCourse: nextCourse, remainingCourses };
   },
 });
 

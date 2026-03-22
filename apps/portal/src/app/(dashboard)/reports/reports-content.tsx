@@ -40,6 +40,14 @@ import {
   ArrowUpDown,
   Receipt,
   Clock,
+  FlaskConical,
+  Sunrise,
+  Trash2,
+  Trophy,
+  ChevronDown,
+  ChevronUp,
+  Star,
+  AlertTriangle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { formatCents } from '@/lib/format';
@@ -48,7 +56,7 @@ import { formatCents } from '@/lib/format';
 // Types
 // ────────────────────────────────────────────
 
-type TabId = 'dashboard' | 'sales' | 'staff' | 'menu' | 'financial' | 'comparison' | 'tips';
+type TabId = 'dashboard' | 'sales' | 'dayparts' | 'staff' | 'menu' | 'engineering' | 'financial' | 'waste' | 'comparison' | 'tips';
 type DatePreset = 'today' | 'yesterday' | 'this_week' | 'this_month' | 'custom';
 
 interface TabDef {
@@ -59,9 +67,12 @@ interface TabDef {
 const TABS: TabDef[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'sales', label: 'Sales' },
+  { id: 'dayparts', label: 'Dayparts' },
   { id: 'staff', label: 'Staff' },
   { id: 'menu', label: 'Menu' },
+  { id: 'engineering', label: 'Menu Engineering' },
   { id: 'financial', label: 'Financial' },
+  { id: 'waste', label: 'Waste' },
   { id: 'comparison', label: 'Comparison' },
   { id: 'tips', label: 'Tips' },
 ];
@@ -307,6 +318,22 @@ export default function ReportsPage() {
     api.reports.queries.getTipReport,
     activeTab === 'tips' ? queryArgs : 'skip'
   );
+  const menuEngineering = useQuery(
+    api.reports.queries.getMenuEngineeringReport,
+    activeTab === 'engineering' ? queryArgs : 'skip'
+  );
+  const daypartAnalysis = useQuery(
+    api.reports.queries.getDaypartAnalysis,
+    activeTab === 'dayparts' ? queryArgs : 'skip'
+  );
+  const serverPerformance = useQuery(
+    api.reports.queries.getServerPerformanceReport,
+    activeTab === 'staff' ? queryArgs : 'skip'
+  );
+  const wasteReport = useQuery(
+    api.reports.queries.getWasteReport,
+    activeTab === 'waste' ? queryArgs : 'skip'
+  );
   const exportData = useQuery(
     api.reports.queries.exportReportData,
     queryArgs
@@ -437,11 +464,17 @@ export default function ReportsPage() {
       {activeTab === 'sales' && (
         <SalesTab heatmap={hourlyHeatmap} channels={channelReport} />
       )}
+      {activeTab === 'dayparts' && (
+        <DaypartTab data={daypartAnalysis} />
+      )}
       {activeTab === 'staff' && (
-        <StaffTab servers={serverReport} />
+        <StaffTab servers={serverReport} enhanced={serverPerformance} />
       )}
       {activeTab === 'menu' && (
         <MenuTab categories={categoryReport} topItems={topItems} />
+      )}
+      {activeTab === 'engineering' && (
+        <MenuEngineeringTab data={menuEngineering} />
       )}
       {activeTab === 'financial' && (
         <FinancialTab
@@ -449,6 +482,9 @@ export default function ReportsPage() {
           tax={taxReport}
           discounts={discountReport}
         />
+      )}
+      {activeTab === 'waste' && (
+        <WasteTab data={wasteReport} />
       )}
       {activeTab === 'comparison' && (
         <ComparisonTab data={comparisonReport} />
@@ -734,9 +770,139 @@ interface ServerRow {
   avgOrderValue: number;
 }
 
-function StaffTab({ servers }: { servers: ServerRow[] | undefined }) {
-  const { sortKey, sortDir, toggle, sort } = useSortable<ServerRow>('totalRevenue');
-  const sorted = sort(servers ?? []);
+interface EnhancedServerRow {
+  rank: number;
+  serverId: string;
+  name: string;
+  orderCount: number;
+  totalRevenue: number;
+  totalTips: number;
+  avgOrderValue: number;
+  totalModifiers: number;
+  totalItems: number;
+  upsellRate: number;
+  tipPercent: number;
+  avgTableTurnMinutes: number | null;
+}
+
+const MEDAL_COLORS = ['text-yellow-500', 'text-gray-400', 'text-amber-700'] as const;
+const MEDAL_LABELS = ['1st', '2nd', '3rd'] as const;
+
+function StaffTab({ servers, enhanced }: { servers: ServerRow[] | undefined; enhanced: EnhancedServerRow[] | undefined }) {
+  const { sortKey, sortDir, toggle, sort } = useSortable<EnhancedServerRow>('totalRevenue');
+
+  // Use enhanced data if available, otherwise fall back to basic
+  if (enhanced && enhanced.length > 0) {
+    const sorted = sort(enhanced);
+    const maxRevenue = Math.max(...enhanced.map((s) => s.totalRevenue), 1);
+    const maxUpsell = Math.max(...enhanced.map((s) => s.upsellRate), 0.001);
+    const maxTipPct = Math.max(...enhanced.map((s) => s.tipPercent), 1);
+
+    return (
+      <div className="space-y-6">
+        {/* Leaderboard header — top 3 */}
+        {enhanced.length >= 2 && (
+          <div className="grid gap-4 sm:grid-cols-3">
+            {enhanced.slice(0, 3).map((s, idx) => (
+              <Card key={s.serverId} className={idx === 0 ? 'border-yellow-400 border-2' : ''}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <Trophy className={`h-4 w-4 ${MEDAL_COLORS[idx] ?? 'text-muted-foreground'}`} />
+                    {MEDAL_LABELS[idx] ?? `${idx + 1}th`} Place
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-lg font-bold">{s.name}</p>
+                  <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
+                    <span>${formatCents(s.totalRevenue)} revenue</span>
+                    <span>{s.orderCount} orders</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Full sortable table */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Users className="h-4 w-4" />
+              Server Performance
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">Rank</TableHead>
+                    <SortHeader label="Server" sortKey="name" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} />
+                    <SortHeader label="Orders" sortKey="orderCount" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
+                    <SortHeader label="Revenue" sortKey="totalRevenue" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
+                    <SortHeader label="Tips" sortKey="totalTips" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
+                    <SortHeader label="Avg Order" sortKey="avgOrderValue" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
+                    <SortHeader label="Upsell Rate" sortKey="upsellRate" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
+                    <SortHeader label="Tip %" sortKey="tipPercent" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
+                    <SortHeader label="Avg Turn" sortKey="avgTableTurnMinutes" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sorted.map((s) => (
+                    <TableRow key={s.serverId}>
+                      <TableCell>
+                        <span className={`font-mono text-xs ${s.rank <= 3 ? 'font-bold' : 'text-muted-foreground'}`}>
+                          {s.rank <= 3 ? (
+                            <Trophy className={`inline h-3.5 w-3.5 ${MEDAL_COLORS[s.rank - 1]}`} />
+                          ) : (
+                            s.rank
+                          )}
+                        </span>
+                      </TableCell>
+                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell className="text-right">{s.orderCount}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="h-1.5 w-16 bg-muted rounded-full overflow-hidden hidden sm:block">
+                            <div className="h-full rounded-full bg-primary" style={{ width: `${(s.totalRevenue / maxRevenue) * 100}%` }} />
+                          </div>
+                          <span className="font-medium">${formatCents(s.totalRevenue)}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">${formatCents(s.totalTips)}</TableCell>
+                      <TableCell className="text-right">${formatCents(s.avgOrderValue)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="h-1.5 w-12 bg-muted rounded-full overflow-hidden hidden sm:block">
+                            <div className="h-full rounded-full bg-blue-500" style={{ width: `${(s.upsellRate / maxUpsell) * 100}%` }} />
+                          </div>
+                          <span>{(s.upsellRate * 100).toFixed(1)}%</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="h-1.5 w-12 bg-muted rounded-full overflow-hidden hidden sm:block">
+                            <div className="h-full rounded-full bg-green-500" style={{ width: `${(s.tipPercent / maxTipPct) * 100}%` }} />
+                          </div>
+                          <span>{s.tipPercent.toFixed(1)}%</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {s.avgTableTurnMinutes !== null ? `${s.avgTableTurnMinutes}m` : '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Fallback: basic server data
+  const basicSorted = [...(servers ?? [])].sort((a, b) => b.totalRevenue - a.totalRevenue);
 
   return (
     <Card>
@@ -747,21 +913,21 @@ function StaffTab({ servers }: { servers: ServerRow[] | undefined }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {sorted.length === 0 ? (
+        {basicSorted.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-6">No server data</p>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <SortHeader label="Server" sortKey="name" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} />
-                <SortHeader label="Orders" sortKey="orderCount" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
-                <SortHeader label="Revenue" sortKey="totalRevenue" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
-                <SortHeader label="Avg Order" sortKey="avgOrderValue" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
-                <SortHeader label="Tips" sortKey="totalTips" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
+                <TableHead>Server</TableHead>
+                <TableHead className="text-right">Orders</TableHead>
+                <TableHead className="text-right">Revenue</TableHead>
+                <TableHead className="text-right">Avg Order</TableHead>
+                <TableHead className="text-right">Tips</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map((s) => (
+              {basicSorted.map((s) => (
                 <TableRow key={s.serverId}>
                   <TableCell className="font-medium">{s.name}</TableCell>
                   <TableCell className="text-right">{s.orderCount}</TableCell>
@@ -1376,6 +1542,705 @@ function TipsTab({ data }: {
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────
+// Menu Engineering Tab
+// ────────────────────────────────────────────
+
+interface EngineeringItem {
+  menuItemId: string;
+  name: string;
+  quantitySold: number;
+  revenue: number;
+  foodCostCents: number;
+  costNotSet: boolean;
+  foodCostPercent: number;
+  contributionMarginCents: number;
+  totalContributionMarginCents: number;
+  classification: 'Star' | 'Puzzle' | 'Plowhorse' | 'Dog';
+}
+
+interface MenuEngineeringData {
+  items: EngineeringItem[];
+  medianPopularity: number;
+  medianMargin: number;
+}
+
+const CLASSIFICATION_COLORS: Record<string, string> = {
+  Star: 'bg-green-100 text-green-800 border-green-300',
+  Puzzle: 'bg-blue-100 text-blue-800 border-blue-300',
+  Plowhorse: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+  Dog: 'bg-red-100 text-red-800 border-red-300',
+};
+
+const QUADRANT_BG: Record<string, string> = {
+  Star: 'bg-green-50',
+  Puzzle: 'bg-blue-50',
+  Plowhorse: 'bg-yellow-50',
+  Dog: 'bg-red-50',
+};
+
+function MenuEngineeringTab({ data }: { data: MenuEngineeringData | undefined }) {
+  const { sortKey, sortDir, toggle, sort } = useSortable<EngineeringItem>('revenue');
+
+  if (!data) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <p className="text-sm text-muted-foreground text-center py-6">Loading menu engineering data...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { items, medianPopularity, medianMargin } = data;
+  const sorted = sort(items);
+
+  const totalItems = items.length;
+  const avgFoodCostPct = items.length > 0
+    ? Math.round(items.reduce((s, i) => s + i.foodCostPercent, 0) / items.length)
+    : 0;
+  const starCount = items.filter((i) => i.classification === 'Star').length;
+  const dogCount = items.filter((i) => i.classification === 'Dog').length;
+
+  // Scatter plot bounds
+  const maxPop = Math.max(...items.map((i) => i.quantitySold), 1);
+  const maxMargin = Math.max(...items.map((i) => i.contributionMarginCents), 1);
+
+  function handleExportEngineering() {
+    const headers = ['Name', 'Qty Sold', 'Revenue', 'Food Cost %', 'Contribution Margin', 'Classification'];
+    const rows = items.map((i) => [
+      i.name,
+      String(i.quantitySold),
+      formatCents(i.revenue),
+      `${i.foodCostPercent}%`,
+      formatCents(i.contributionMarginCents),
+      i.classification,
+    ]);
+    downloadCsv('menu-engineering.csv', headers, rows);
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Summary cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Items</CardTitle>
+            <UtensilsCrossed className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalItems}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Avg Food Cost %</CardTitle>
+            <FlaskConical className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{avgFoodCostPct}%</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Stars</CardTitle>
+            <Star className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-700">{starCount}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Dogs</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{dogCount}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Quadrant scatter */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Menu Engineering Matrix</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="relative">
+            {/* Axis labels */}
+            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+              <span>Low Margin</span>
+              <span>Contribution Margin &rarr;</span>
+              <span>High Margin</span>
+            </div>
+            <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden" style={{ height: 280 }}>
+              {/* Top-left: Plowhorse (high pop, low margin) */}
+              <div className={`${QUADRANT_BG.Plowhorse} relative p-2`}>
+                <span className="text-xs font-medium text-yellow-700">Plowhorse</span>
+                <span className="text-[10px] text-yellow-600 block">High Pop / Low Margin</span>
+                {items
+                  .filter((i) => i.classification === 'Plowhorse')
+                  .map((i) => (
+                    <div
+                      key={i.menuItemId}
+                      className="absolute w-2 h-2 rounded-full bg-yellow-500 border border-yellow-700"
+                      title={`${i.name}: ${i.quantitySold} sold, $${formatCents(i.contributionMarginCents)} margin`}
+                      style={{
+                        left: `${Math.min(90, Math.max(10, (i.contributionMarginCents / maxMargin) * 100))}%`,
+                        bottom: `${Math.min(90, Math.max(10, (i.quantitySold / maxPop) * 100))}%`,
+                      }}
+                    />
+                  ))}
+              </div>
+              {/* Top-right: Star (high pop, high margin) */}
+              <div className={`${QUADRANT_BG.Star} relative p-2`}>
+                <span className="text-xs font-medium text-green-700">Star</span>
+                <span className="text-[10px] text-green-600 block">High Pop / High Margin</span>
+                {items
+                  .filter((i) => i.classification === 'Star')
+                  .map((i) => (
+                    <div
+                      key={i.menuItemId}
+                      className="absolute w-2 h-2 rounded-full bg-green-500 border border-green-700"
+                      title={`${i.name}: ${i.quantitySold} sold, $${formatCents(i.contributionMarginCents)} margin`}
+                      style={{
+                        left: `${Math.min(90, Math.max(10, (i.contributionMarginCents / maxMargin) * 100))}%`,
+                        bottom: `${Math.min(90, Math.max(10, (i.quantitySold / maxPop) * 100))}%`,
+                      }}
+                    />
+                  ))}
+              </div>
+              {/* Bottom-left: Dog (low pop, low margin) */}
+              <div className={`${QUADRANT_BG.Dog} relative p-2`}>
+                <span className="text-xs font-medium text-red-700">Dog</span>
+                <span className="text-[10px] text-red-600 block">Low Pop / Low Margin</span>
+                {items
+                  .filter((i) => i.classification === 'Dog')
+                  .map((i) => (
+                    <div
+                      key={i.menuItemId}
+                      className="absolute w-2 h-2 rounded-full bg-red-500 border border-red-700"
+                      title={`${i.name}: ${i.quantitySold} sold, $${formatCents(i.contributionMarginCents)} margin`}
+                      style={{
+                        left: `${Math.min(90, Math.max(10, (i.contributionMarginCents / maxMargin) * 100))}%`,
+                        bottom: `${Math.min(90, Math.max(10, (i.quantitySold / maxPop) * 100))}%`,
+                      }}
+                    />
+                  ))}
+              </div>
+              {/* Bottom-right: Puzzle (low pop, high margin) */}
+              <div className={`${QUADRANT_BG.Puzzle} relative p-2`}>
+                <span className="text-xs font-medium text-blue-700">Puzzle</span>
+                <span className="text-[10px] text-blue-600 block">Low Pop / High Margin</span>
+                {items
+                  .filter((i) => i.classification === 'Puzzle')
+                  .map((i) => (
+                    <div
+                      key={i.menuItemId}
+                      className="absolute w-2 h-2 rounded-full bg-blue-500 border border-blue-700"
+                      title={`${i.name}: ${i.quantitySold} sold, $${formatCents(i.contributionMarginCents)} margin`}
+                      style={{
+                        left: `${Math.min(90, Math.max(10, (i.contributionMarginCents / maxMargin) * 100))}%`,
+                        bottom: `${Math.min(90, Math.max(10, (i.quantitySold / maxPop) * 100))}%`,
+                      }}
+                    />
+                  ))}
+              </div>
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+              <span>Low Popularity</span>
+              <span>&uarr; Popularity</span>
+              <span>High Popularity</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Median Popularity: {medianPopularity} sold | Median Margin: ${formatCents(medianMargin)}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Sortable table */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Item Details</CardTitle>
+          <Button variant="outline" size="sm" onClick={handleExportEngineering}>
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <SortHeader label="Name" sortKey="name" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} />
+                  <SortHeader label="Qty Sold" sortKey="quantitySold" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
+                  <SortHeader label="Revenue" sortKey="revenue" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
+                  <SortHeader label="Food Cost %" sortKey="foodCostPercent" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
+                  <SortHeader label="Margin" sortKey="contributionMarginCents" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
+                  <TableHead>Classification</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sorted.map((item) => (
+                  <TableRow key={item.menuItemId}>
+                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell className="text-right">{item.quantitySold}</TableCell>
+                    <TableCell className="text-right font-medium">${formatCents(item.revenue)}</TableCell>
+                    <TableCell className="text-right">
+                      {item.costNotSet ? (
+                        <Badge variant="outline" className="text-xs bg-orange-50 text-orange-600 border-orange-300">
+                          Cost not set
+                        </Badge>
+                      ) : (
+                        `${item.foodCostPercent}%`
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">${formatCents(item.contributionMarginCents)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-xs ${CLASSIFICATION_COLORS[item.classification] ?? ''}`}>
+                        {item.classification}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────
+// Daypart Tab
+// ────────────────────────────────────────────
+
+interface DaypartRow {
+  name: string;
+  revenue: number;
+  orderCount: number;
+  avgTicket: number;
+  top5Items: Array<{ name: string; quantity: number }>;
+}
+
+interface DaypartData {
+  dayparts: DaypartRow[];
+  previousDayparts: DaypartRow[];
+}
+
+function DaypartTab({ data }: { data: DaypartData | undefined }) {
+  const [expandedDaypart, setExpandedDaypart] = useState<string | null>(null);
+
+  if (!data) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <p className="text-sm text-muted-foreground text-center py-6">Loading daypart data...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { dayparts, previousDayparts } = data;
+  const maxRevenue = Math.max(...dayparts.map((d) => d.revenue), 1);
+
+  // Build a lookup for previous period by name
+  const prevLookup: Record<string, DaypartRow> = {};
+  for (const dp of previousDayparts) {
+    prevLookup[dp.name] = dp;
+  }
+
+  function pctChange(current: number, previous: number): number {
+    if (previous === 0) return current > 0 ? 100 : 0;
+    return Math.round(((current - previous) / previous) * 10000) / 100;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Daypart summary cards */}
+      <div className="flex gap-4 overflow-x-auto pb-2">
+        {dayparts.map((dp) => (
+          <Card key={dp.name} className="min-w-[180px] flex-shrink-0">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <Sunrise className="h-4 w-4" />
+                {dp.name}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xl font-bold">${formatCents(dp.revenue)}</p>
+              <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                <span>{dp.orderCount} orders</span>
+                <span>|</span>
+                <span>${formatCents(dp.avgTicket)} avg</span>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Proportional bar chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Revenue by Daypart</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {dayparts.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">No data</p>
+          ) : (
+            <div className="flex items-end gap-3" style={{ height: 200 }}>
+              {dayparts.map((dp) => {
+                const heightPct = maxRevenue > 0 ? (dp.revenue / maxRevenue) * 100 : 0;
+                return (
+                  <div key={dp.name} className="flex-1 flex flex-col items-center gap-1">
+                    <span className="text-xs font-medium">${formatCents(dp.revenue)}</span>
+                    <div
+                      className="w-full bg-primary rounded-t-md transition-all duration-300"
+                      style={{ height: `${Math.max(heightPct, 2)}%` }}
+                    />
+                    <span className="text-xs text-muted-foreground text-center">{dp.name}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Current vs Previous comparison */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Period Comparison</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {dayparts.map((dp) => {
+              const prev = prevLookup[dp.name];
+              const revChange = prev ? pctChange(dp.revenue, prev.revenue) : null;
+              const countChange = prev ? pctChange(dp.orderCount, prev.orderCount) : null;
+              const isUp = revChange !== null && revChange > 0;
+              const isDown = revChange !== null && revChange < 0;
+
+              return (
+                <div key={dp.name} className="rounded-lg border p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{dp.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        ${formatCents(dp.revenue)} revenue | {dp.orderCount} orders
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {revChange !== null && (
+                        <div className="flex items-center gap-1">
+                          {isUp && <TrendingUp className="h-4 w-4 text-green-600" />}
+                          {isDown && <TrendingDown className="h-4 w-4 text-red-600" />}
+                          <span className={`text-sm font-medium ${isUp ? 'text-green-600' : isDown ? 'text-red-600' : 'text-muted-foreground'}`}>
+                            {isUp ? '+' : ''}{revChange}%
+                          </span>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setExpandedDaypart(expandedDaypart === dp.name ? null : dp.name)}
+                        className="p-1 rounded hover:bg-muted transition-colors"
+                        aria-label={`${expandedDaypart === dp.name ? 'Collapse' : 'Expand'} ${dp.name} details`}
+                      >
+                        {expandedDaypart === dp.name ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  {prev && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Previous: ${formatCents(prev.revenue)} revenue | {prev.orderCount} orders
+                      {countChange !== null && ` (${countChange > 0 ? '+' : ''}${countChange}% orders)`}
+                    </p>
+                  )}
+
+                  {/* Expandable top 5 items */}
+                  {expandedDaypart === dp.name && dp.top5Items.length > 0 && (
+                    <div className="mt-3 pt-3 border-t">
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Top 5 Items</p>
+                      <div className="space-y-1">
+                        {dp.top5Items.map((item, idx) => (
+                          <div key={item.name} className="flex items-center justify-between text-sm">
+                            <span className="flex items-center gap-2">
+                              <span className="text-xs font-mono text-muted-foreground">{idx + 1}.</span>
+                              {item.name}
+                            </span>
+                            <Badge variant="outline" className="text-xs">{item.quantity} sold</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────
+// Waste Tab
+// ────────────────────────────────────────────
+
+interface WasteData {
+  totalWaste: {
+    voidsCents: number;
+    compsCents: number;
+    discountsCents: number;
+    totalCents: number;
+  };
+  topWastedItems: Array<{ name: string; quantity: number; valueCents: number }>;
+  dailyTrend: Array<{ date: string; voidsCents: number; compsCents: number; discountsCents: number }>;
+  voidDetails: Array<{
+    name: string;
+    quantity: number;
+    valueCents: number;
+    reason: string;
+    voidedBy: string;
+    orderNumber: number;
+  }>;
+}
+
+function WasteTab({ data }: { data: WasteData | undefined }) {
+  const { sortKey, sortDir, toggle, sort } = useSortable<WasteData['topWastedItems'][number]>('valueCents');
+
+  if (!data) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <p className="text-sm text-muted-foreground text-center py-6">Loading waste data...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { totalWaste, topWastedItems, dailyTrend, voidDetails } = data;
+  const sortedItems = sort(topWastedItems);
+  const maxDailyWaste = Math.max(
+    ...dailyTrend.map((d) => d.voidsCents + d.compsCents + d.discountsCents),
+    1
+  );
+
+  // Donut chart segments
+  const total = totalWaste.totalCents || 1;
+  const voidPct = (totalWaste.voidsCents / total) * 100;
+  const compPct = (totalWaste.compsCents / total) * 100;
+  const discPct = (totalWaste.discountsCents / total) * 100;
+  const conicGradient = `conic-gradient(
+    #ef4444 0% ${voidPct}%,
+    #f59e0b ${voidPct}% ${voidPct + compPct}%,
+    #3b82f6 ${voidPct + compPct}% ${voidPct + compPct + discPct}%,
+    #e5e7eb ${voidPct + compPct + discPct}% 100%
+  )`;
+
+  function handleExportWaste() {
+    const headers = ['Item', 'Quantity', 'Value', 'Reason', 'Voided By', 'Order #'];
+    const rows = voidDetails.map((v) => [
+      v.name,
+      String(v.quantity),
+      formatCents(v.valueCents),
+      v.reason,
+      v.voidedBy,
+      String(v.orderNumber),
+    ]);
+    downloadCsv('waste-report.csv', headers, rows);
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Summary cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Waste</CardTitle>
+            <Trash2 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${formatCents(totalWaste.totalCents)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Voids</CardTitle>
+            <Trash2 className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">${formatCents(totalWaste.voidsCents)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Comps</CardTitle>
+            <DollarSign className="h-4 w-4 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-amber-600">${formatCents(totalWaste.compsCents)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Discounts</CardTitle>
+            <Receipt className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">${formatCents(totalWaste.discountsCents)}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Donut chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Waste Breakdown</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col items-center gap-4">
+              <div className="relative">
+                <div
+                  className="rounded-full"
+                  style={{
+                    width: 180,
+                    height: 180,
+                    background: totalWaste.totalCents > 0 ? conicGradient : '#e5e7eb',
+                  }}
+                >
+                  {/* Center overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="bg-background rounded-full flex flex-col items-center justify-center" style={{ width: 110, height: 110 }}>
+                      <span className="text-xs text-muted-foreground">Total</span>
+                      <span className="text-lg font-bold">${formatCents(totalWaste.totalCents)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-4 text-sm">
+                <div className="flex items-center gap-1.5">
+                  <div className="h-3 w-3 rounded-full bg-red-500" />
+                  <span>Voids ({voidPct.toFixed(0)}%)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="h-3 w-3 rounded-full bg-amber-500" />
+                  <span>Comps ({compPct.toFixed(0)}%)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="h-3 w-3 rounded-full bg-blue-500" />
+                  <span>Discounts ({discPct.toFixed(0)}%)</span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Daily trend */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Daily Waste Trend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {dailyTrend.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No data</p>
+            ) : (
+              <div className="space-y-3">
+                {dailyTrend.map((day) => {
+                  const dayTotal = day.voidsCents + day.compsCents + day.discountsCents;
+                  const pct = maxDailyWaste > 0 ? (dayTotal / maxDailyWaste) * 100 : 0;
+                  return (
+                    <div key={day.date} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground font-medium">
+                          {new Date(day.date + 'T12:00:00').toLocaleDateString('en-US', {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </span>
+                        <span className="font-bold">${formatCents(dayTotal)}</span>
+                      </div>
+                      <div className="h-3 bg-muted rounded-full overflow-hidden">
+                        {/* Stacked segments */}
+                        <div className="h-full flex rounded-full overflow-hidden" style={{ width: `${Math.max(pct, 2)}%` }}>
+                          {day.voidsCents > 0 && (
+                            <div
+                              className="h-full bg-red-500"
+                              style={{ width: `${(day.voidsCents / dayTotal) * 100}%` }}
+                            />
+                          )}
+                          {day.compsCents > 0 && (
+                            <div
+                              className="h-full bg-amber-500"
+                              style={{ width: `${(day.compsCents / dayTotal) * 100}%` }}
+                            />
+                          )}
+                          {day.discountsCents > 0 && (
+                            <div
+                              className="h-full bg-blue-500"
+                              style={{ width: `${(day.discountsCents / dayTotal) * 100}%` }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Top wasted items table */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Top Wasted Items</CardTitle>
+          <Button variant="outline" size="sm" onClick={handleExportWaste} disabled={voidDetails.length === 0}>
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {sortedItems.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">No voided items</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <SortHeader label="Item" sortKey="name" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} />
+                  <SortHeader label="Qty" sortKey="quantity" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
+                  <SortHeader label="Value" sortKey="valueCents" currentKey={String(sortKey)} currentDir={sortDir} onToggle={toggle} className="text-right" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedItems.map((item, idx) => (
+                  <TableRow key={item.name}>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{idx + 1}</TableCell>
+                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell className="text-right">{item.quantity}</TableCell>
+                    <TableCell className="text-right font-medium">${formatCents(item.valueCents)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -47,6 +47,7 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
+  ChefHat,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Doc } from '@restaurantos/backend/dataModel';
@@ -54,6 +55,7 @@ import { DiscountsTab } from './tabs/discounts-tab';
 import { PaymentsTab } from './tabs/payments-tab';
 import { LoyaltyTab } from './tabs/loyalty-tab';
 import { AccountingTab } from './tabs/accounting-tab';
+import { KitchenTab } from './tabs/kitchen-tab';
 
 const TABS = [
   { id: 'business', label: 'Business Info', icon: Building2 },
@@ -70,6 +72,7 @@ const TABS = [
   { id: 'delivery', label: 'Delivery', icon: Truck },
   { id: 'branding', label: 'Branding', icon: Palette },
   { id: 'website', label: 'Website', icon: LayoutTemplate },
+  { id: 'kitchen', label: 'Kitchen / KDS', icon: ChefHat },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
@@ -293,6 +296,11 @@ export default function SettingsPage() {
       {/* ==================== Website ==================== */}
       {activeTab === 'website' && (
         <WebsiteTab tenant={tenant} onSave={updateSettings} />
+      )}
+
+      {/* ==================== Kitchen / KDS ==================== */}
+      {activeTab === 'kitchen' && (
+        <KitchenTab tenant={tenant} tenantId={tenantId!} />
       )}
 
       {/* ==================== Staff Dialog ==================== */}
