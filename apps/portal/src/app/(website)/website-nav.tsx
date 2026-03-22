@@ -42,6 +42,7 @@ export function WebsiteNav({
     { href: '/', label: 'Home' },
     { href: '/our-menu', label: 'Menu' },
     { href: '/events', label: 'Events & Specials' },
+    { href: '/gift-cards', label: 'Gift Cards' },
     ...(hasReservations ? [{ href: '/book', label: 'Reservations' }] : []),
     { href: '/about', label: 'About' },
     { href: '/contact', label: 'Contact' },

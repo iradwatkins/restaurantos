@@ -57,6 +57,7 @@ import { CustomerLookup } from './components/customer-lookup';
 import { LoyaltyCheckoutSection, LoyaltyEarnedMessage } from './components/loyalty-checkout-section';
 import { DeliveryPanel } from './components/delivery-panel';
 import { OpenTabDialog } from './components/open-tab-dialog';
+import { GiftCardSaleDialog } from './components/gift-card-sale-dialog';
 
 const ALCOHOL_TYPES = ['beer', 'wine', 'spirits'];
 
@@ -234,6 +235,18 @@ export default function OrdersPage() {
   // Delivery panel state
   const [deliveryOrderId, setDeliveryOrderId] = useState<string | null>(null);
   const doordashEnabled = tenant?.doordashDriveEnabled ?? false;
+
+  // Gift card state
+  const [showGiftCardSale, setShowGiftCardSale] = useState(false);
+  const [giftCardCode, setGiftCardCode] = useState('');
+  const [giftCardBalance, setGiftCardBalance] = useState<number | null>(null);
+  const [giftCardChecking, setGiftCardChecking] = useState(false);
+  const [giftCardError, setGiftCardError] = useState<string | null>(null);
+  const [showGiftCardPayment, setShowGiftCardPayment] = useState(false);
+  const [giftCardAppliedAmount, setGiftCardAppliedAmount] = useState(0);
+  const [giftCardRemainingMethod, setGiftCardRemainingMethod] = useState<'cash' | 'card' | null>(null);
+  const publicCheckBalance = useMutation(api.giftCards.mutations.publicCheckBalance);
+  const redeemGiftCard = useMutation(api.giftCards.mutations.redeemGiftCard);
 
   // Tab management state
   const [showOpenTab, setShowOpenTab] = useState(false);
@@ -440,6 +453,101 @@ export default function OrdersPage() {
     setTipSelection({ type: 'none' });
     setCustomTipCents(0);
     setShowCashTender(false);
+  }
+
+  function resetGiftCardState() {
+    setGiftCardCode('');
+    setGiftCardBalance(null);
+    setGiftCardChecking(false);
+    setGiftCardError(null);
+    setShowGiftCardPayment(false);
+    setGiftCardAppliedAmount(0);
+    setGiftCardRemainingMethod(null);
+  }
+
+  function formatGiftCardCode(value: string): string {
+    const cleaned = value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 16);
+    const chunks: string[] = [];
+    for (let i = 0; i < cleaned.length; i += 4) {
+      chunks.push(cleaned.slice(i, i + 4));
+    }
+    return chunks.join('-');
+  }
+
+  async function handleCheckGiftCardBalance() {
+    if (!tenantId || giftCardCode.replace(/-/g, '').length < 4) return;
+    setGiftCardChecking(true);
+    setGiftCardError(null);
+    setGiftCardBalance(null);
+    try {
+      const result = await publicCheckBalance({
+        tenantId,
+        code: giftCardCode.replace(/-/g, ''),
+      });
+      if (result.status !== 'active') {
+        setGiftCardError('This gift card is not active.');
+      } else if (result.balanceCents <= 0) {
+        setGiftCardError('This gift card has no remaining balance.');
+      } else {
+        setGiftCardBalance(result.balanceCents);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Invalid gift card code';
+      setGiftCardError(message);
+    } finally {
+      setGiftCardChecking(false);
+    }
+  }
+
+  async function handleGiftCardPayment(
+    orderId: string,
+    orderGrandTotal: number,
+    tipCents: number,
+  ) {
+    if (!tenantId || giftCardBalance === null) return;
+
+    const applyAmount = Math.min(giftCardBalance, orderGrandTotal);
+
+    try {
+      await redeemGiftCard({
+        tenantId,
+        code: giftCardCode.replace(/-/g, ''),
+        amountCents: applyAmount,
+        orderId,
+        staffId: undefined,
+      });
+
+      if (applyAmount >= orderGrandTotal) {
+        // Gift card covers full amount
+        await recordPayment({
+          tenantId,
+          orderId,
+          amount: orderGrandTotal,
+          method: 'gift_card',
+          tipAmount: tipCents,
+          tipMethod: 'cash',
+        });
+        await updateOrderStatus({ orderId, status: 'completed' });
+
+        const paidOrder = activeOrders?.find((o) => o._id === orderId);
+        if (paidOrder?.isTab && paidOrder.tabStatus === 'open') {
+          await closeTabMut({ orderId });
+        }
+
+        toast.success('Gift card payment recorded, order completed');
+        setShowPayDialog(null);
+        resetTipState();
+        resetGiftCardState();
+      } else {
+        // Partial payment — show remaining balance options
+        setGiftCardAppliedAmount(applyAmount);
+        setShowGiftCardPayment(false);
+        toast.success(`$${formatCents(applyAmount)} applied from gift card`);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Gift card redemption failed';
+      toast.error(message);
+    }
   }
 
   async function handleCardPayment(
@@ -705,6 +813,13 @@ export default function OrdersPage() {
               Sync ({pendingCount})
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={() => setShowGiftCardSale(true)}
+          >
+            <Gift className="mr-2 h-4 w-4" />
+            Sell Gift Card
+          </Button>
           <Button
             variant="outline"
             onClick={() => setShowOpenTab(true)}
@@ -1178,7 +1293,7 @@ export default function OrdersPage() {
       </Card>
 
       {/* Payment Dialog */}
-      <Dialog open={!!showPayDialog} onOpenChange={() => { setShowPayDialog(null); resetTipState(); setShowCardPayment(false); setCardPaymentPhase('connecting'); setCardPaymentError(null); stripeTerminal.cancelCollect(); squareTerminal.cancelCollect(); }}>
+      <Dialog open={!!showPayDialog} onOpenChange={() => { setShowPayDialog(null); resetTipState(); resetGiftCardState(); setShowCardPayment(false); setCardPaymentPhase('connecting'); setCardPaymentError(null); stripeTerminal.cancelCollect(); squareTerminal.cancelCollect(); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
@@ -1435,40 +1550,156 @@ export default function OrdersPage() {
                   </div>
                 )}
 
-                {/* Payment method buttons */}
-                {!showCardPayment && (
-                  <div className="grid grid-cols-2 gap-3">
+                {/* Gift Card Payment Section */}
+                {showGiftCardPayment && !showCardPayment && (
+                  <div className="space-y-3 rounded-lg border p-4">
+                    <p className="text-sm font-medium flex items-center gap-2">
+                      <Gift className="h-4 w-4" />
+                      Pay with Gift Card
+                    </p>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="XXXX-XXXX-XXXX-XXXX"
+                        value={giftCardCode}
+                        onChange={(e) => setGiftCardCode(formatGiftCardCode(e.target.value))}
+                        className="font-mono text-sm tracking-wider"
+                        maxLength={19}
+                        aria-label="Gift card code"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={giftCardChecking || giftCardCode.replace(/-/g, '').length < 4}
+                        onClick={handleCheckGiftCardBalance}
+                      >
+                        {giftCardChecking ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          'Check'
+                        )}
+                      </Button>
+                    </div>
+                    {giftCardError && (
+                      <p className="text-sm text-destructive">{giftCardError}</p>
+                    )}
+                    {giftCardBalance !== null && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm bg-muted/50 rounded-md p-2">
+                          <span className="text-muted-foreground">Card Balance</span>
+                          <span className="font-bold">${formatCents(giftCardBalance)}</span>
+                        </div>
+                        {giftCardBalance >= grandTotal ? (
+                          <Button
+                            className="w-full"
+                            onClick={() => handleGiftCardPayment(order._id, grandTotal, tipCents)}
+                          >
+                            <Gift className="mr-2 h-4 w-4" />
+                            Pay ${formatCents(grandTotal)} with Gift Card
+                          </Button>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground text-center">
+                              Apply ${formatCents(giftCardBalance)} from gift card — remaining ${formatCents(grandTotal - giftCardBalance)} via Cash or Card
+                            </p>
+                            <Button
+                              className="w-full"
+                              onClick={() => handleGiftCardPayment(order._id, grandTotal, tipCents)}
+                            >
+                              <Gift className="mr-2 h-4 w-4" />
+                              Apply ${formatCents(giftCardBalance)} Gift Card
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <Button
-                      className="h-16"
-                      variant="outline"
-                      onClick={() => setShowCashTender(true)}
-                    >
-                      <DollarSign className="mr-2 h-5 w-5" />
-                      Cash
-                    </Button>
-                    <Button
-                      className="h-16"
-                      disabled={!isOnline}
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-muted-foreground"
                       onClick={() => {
-                        if (!isOnline) {
-                          toast.error('Card payments are not available while offline. Use cash instead.');
-                          return;
-                        }
-                        const proc = tenant?.paymentProcessor;
-                        if (proc === 'stripe') {
-                          handleCardPayment(order._id, grandTotal, tipCents);
-                        } else if (proc === 'square') {
-                          handleSquareCardPayment(order._id, grandTotal, tipCents);
-                        } else {
-                          toast.info(
-                            'Card payments require a payment processor. Configure in Settings > Payments.'
-                          );
-                        }
+                        setShowGiftCardPayment(false);
+                        resetGiftCardState();
                       }}
                     >
-                      <CreditCard className="mr-2 h-5 w-5" />
-                      {isOnline ? 'Card' : 'Card (Offline)'}
+                      Cancel
                     </Button>
+                  </div>
+                )}
+
+                {/* Gift Card Applied — Remaining Balance */}
+                {giftCardAppliedAmount > 0 && !showCardPayment && (
+                  <div className="rounded-lg bg-green-50 border border-green-200 p-3 space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-green-800 flex items-center gap-1.5">
+                        <Gift className="h-3.5 w-3.5" />
+                        Gift Card Applied
+                      </span>
+                      <span className="font-bold text-green-700">
+                        -${formatCents(giftCardAppliedAmount)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm font-bold">
+                      <span>Remaining Due</span>
+                      <span>${formatCents(grandTotal - giftCardAppliedAmount)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Payment method buttons */}
+                {!showCardPayment && !showGiftCardPayment && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <Button
+                        className="h-16"
+                        variant="outline"
+                        onClick={() => {
+                          if (giftCardAppliedAmount > 0) {
+                            handleCashPayment(order._id, grandTotal - giftCardAppliedAmount, tipCents, 'cash');
+                          } else {
+                            setShowCashTender(true);
+                          }
+                        }}
+                      >
+                        <DollarSign className="mr-2 h-5 w-5" />
+                        Cash
+                      </Button>
+                      <Button
+                        className="h-16"
+                        disabled={!isOnline}
+                        onClick={() => {
+                          if (!isOnline) {
+                            toast.error('Card payments are not available while offline. Use cash instead.');
+                            return;
+                          }
+                          const payTotal = giftCardAppliedAmount > 0
+                            ? grandTotal - giftCardAppliedAmount
+                            : grandTotal;
+                          const proc = tenant?.paymentProcessor;
+                          if (proc === 'stripe') {
+                            handleCardPayment(order._id, payTotal, tipCents);
+                          } else if (proc === 'square') {
+                            handleSquareCardPayment(order._id, payTotal, tipCents);
+                          } else {
+                            toast.info(
+                              'Card payments require a payment processor. Configure in Settings > Payments.'
+                            );
+                          }
+                        }}
+                      >
+                        <CreditCard className="mr-2 h-5 w-5" />
+                        {isOnline ? 'Card' : 'Card (Offline)'}
+                      </Button>
+                    </div>
+                    {giftCardAppliedAmount === 0 && (
+                      <Button
+                        className="w-full h-12"
+                        variant="outline"
+                        onClick={() => setShowGiftCardPayment(true)}
+                      >
+                        <Gift className="mr-2 h-4 w-4" />
+                        Gift Card
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1555,6 +1786,15 @@ export default function OrdersPage() {
           })()}
         </DialogContent>
       </Dialog>
+
+      {/* Gift Card Sale Dialog */}
+      {tenantId && (
+        <GiftCardSaleDialog
+          open={showGiftCardSale}
+          onOpenChange={setShowGiftCardSale}
+          tenantId={tenantId}
+        />
+      )}
     </div>
   );
 }

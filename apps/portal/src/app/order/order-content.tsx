@@ -20,7 +20,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@restaurantos/ui';
-import { ShoppingCart, Plus, Minus, Check, Star, Clock, Wine, MapPin, Truck } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Check, Star, Clock, Wine, MapPin, Truck, Gift, X, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
@@ -96,6 +96,17 @@ export default function OnlineOrderPage() {
   const [scheduledTime, setScheduledTime] = useState<string>('');
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [, setPaymentIntentId] = useState<string | null>(null);
+
+  // Gift card state
+  const [giftCardCode, setGiftCardCode] = useState('');
+  const [giftCardBalance, setGiftCardBalance] = useState<number | null>(null);
+  const [giftCardApplied, setGiftCardApplied] = useState(false);
+  const [giftCardDiscount, setGiftCardDiscount] = useState(0);
+  const [giftCardError, setGiftCardError] = useState<string | null>(null);
+  const [giftCardChecking, setGiftCardChecking] = useState(false);
+  const [showGiftCardInput, setShowGiftCardInput] = useState(false);
+  const publicCheckBalance = useMutation(api.giftCards.mutations.publicCheckBalance);
+  const redeemGiftCard = useMutation(api.giftCards.mutations.redeemGiftCard);
 
   // Validate delivery zip code when it changes
   const zipValidationQuery = useQuery(
@@ -221,12 +232,65 @@ export default function OnlineOrderPage() {
     }
   }
 
+  function formatGiftCardCode(value: string): string {
+    const cleaned = value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 16);
+    const chunks: string[] = [];
+    for (let i = 0; i < cleaned.length; i += 4) {
+      chunks.push(cleaned.slice(i, i + 4));
+    }
+    return chunks.join('-');
+  }
+
+  async function handleApplyGiftCard() {
+    if (!tenantId || giftCardCode.replace(/-/g, '').length < 4) return;
+    setGiftCardChecking(true);
+    setGiftCardError(null);
+    try {
+      const result = await publicCheckBalance({
+        tenantId,
+        code: giftCardCode.replace(/-/g, ''),
+      });
+      if (result.status !== 'active') {
+        setGiftCardError('This gift card is not active.');
+        return;
+      }
+      if (result.balanceCents <= 0) {
+        setGiftCardError('This gift card has no remaining balance.');
+        return;
+      }
+      setGiftCardBalance(result.balanceCents);
+      const appliedAmount = Math.min(result.balanceCents, subtotal + tax + deliveryFee);
+      setGiftCardDiscount(appliedAmount);
+      setGiftCardApplied(true);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Invalid gift card code';
+      setGiftCardError(message);
+    } finally {
+      setGiftCardChecking(false);
+    }
+  }
+
+  function removeGiftCard() {
+    setGiftCardCode('');
+    setGiftCardBalance(null);
+    setGiftCardApplied(false);
+    setGiftCardDiscount(0);
+    setGiftCardError(null);
+  }
+
   const subtotal = cart.reduce((sum, item) => sum + item.lineTotal, 0);
   const tax = Math.round(subtotal * TAX_RATE);
   const total = subtotal + tax + deliveryFee;
+  const totalAfterGiftCard = Math.max(0, total - giftCardDiscount);
   const taxDisplay = `${(TAX_RATE * 100).toFixed(2)}%`;
 
   async function initiatePayment() {
+    // If gift card covers full amount, skip Stripe entirely
+    if (giftCardApplied && totalAfterGiftCard === 0) {
+      await submitOrder(undefined);
+      return;
+    }
+
     if (!stripePromise) {
       await submitOrder(undefined);
       return;
@@ -237,7 +301,7 @@ export default function OnlineOrderPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: total,
+          amount: totalAfterGiftCard,
           currency: 'usd',
           metadata: { tenantId, source: 'online_ordering' },
         }),
@@ -364,6 +428,23 @@ export default function OnlineOrderPage() {
         stripePaymentIntentId,
       });
 
+      // Redeem gift card if applied
+      if (giftCardApplied && giftCardDiscount > 0) {
+        try {
+          await redeemGiftCard({
+            tenantId: tenantId!,
+            code: giftCardCode.replace(/-/g, ''),
+            amountCents: giftCardDiscount,
+            orderId: result.orderId,
+            staffId: undefined,
+          });
+        } catch {
+          // Gift card redemption failed but order was placed —
+          // do not block the order confirmation
+          toast.error('Gift card redemption failed. The restaurant will process your discount.');
+        }
+      }
+
       setOrderPlaced({
         orderNumber: result.orderNumber,
         orderId: result.orderId as string,
@@ -375,6 +456,7 @@ export default function OnlineOrderPage() {
       setCart([]);
       setClientSecret(null);
       setPaymentIntentId(null);
+      removeGiftCard();
       toast.success('Order placed!');
     } catch (err: any) {
       toast.error(err.message || 'Failed to place order');
@@ -690,11 +772,91 @@ export default function OnlineOrderPage() {
                       <span>Free</span>
                     </div>
                   )}
+                  {giftCardApplied && giftCardDiscount > 0 && (
+                    <div className="flex justify-between text-green-600">
+                      <span className="flex items-center gap-1">
+                        <Gift className="h-3 w-3" />
+                        Gift Card
+                      </span>
+                      <span>-${(giftCardDiscount / 100).toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between font-bold text-base pt-1">
                     <span>Total</span>
-                    <span>${(total / 100).toFixed(2)}</span>
+                    <span>${(totalAfterGiftCard / 100).toFixed(2)}</span>
                   </div>
                 </div>
+
+                {/* Gift Card Section */}
+                {!giftCardApplied && (
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowGiftCardInput(!showGiftCardInput)}
+                      className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Gift className="h-3.5 w-3.5" />
+                      Have a gift card?
+                      {showGiftCardInput ? (
+                        <ChevronUp className="h-3 w-3" />
+                      ) : (
+                        <ChevronDown className="h-3 w-3" />
+                      )}
+                    </button>
+                    {showGiftCardInput && (
+                      <div className="space-y-2 rounded-lg border p-3">
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="XXXX-XXXX-XXXX-XXXX"
+                            value={giftCardCode}
+                            onChange={(e) => setGiftCardCode(formatGiftCardCode(e.target.value))}
+                            className="font-mono text-sm tracking-wider"
+                            maxLength={19}
+                            aria-label="Gift card code"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={giftCardChecking || giftCardCode.replace(/-/g, '').length < 4}
+                            onClick={handleApplyGiftCard}
+                          >
+                            {giftCardChecking ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              'Apply'
+                            )}
+                          </Button>
+                        </div>
+                        {giftCardError && (
+                          <p className="text-xs text-destructive">{giftCardError}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {giftCardApplied && (
+                  <div className="flex items-center justify-between rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm">
+                    <span className="text-green-800 flex items-center gap-1.5">
+                      <Gift className="h-3.5 w-3.5" />
+                      Gift card applied
+                      {giftCardBalance !== null && (
+                        <span className="text-green-600">
+                          (balance: ${(giftCardBalance / 100).toFixed(2)})
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={removeGiftCard}
+                      className="text-green-700 hover:text-red-600 transition-colors"
+                      aria-label="Remove gift card"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
 
                 {!showCheckout ? (
                   <Button
@@ -705,14 +867,14 @@ export default function OnlineOrderPage() {
                       (!deliveryValidation?.valid || !deliveryAddress.street.trim())
                     }
                   >
-                    Checkout — ${(total / 100).toFixed(2)}
+                    Checkout — ${(totalAfterGiftCard / 100).toFixed(2)}
                   </Button>
                 ) : clientSecret && stripePromise ? (
                   <Elements stripe={stripePromise} options={{ clientSecret }}>
                     <StripeCheckoutForm
                       onSuccess={(piId) => submitOrder(piId)}
                       submitting={submitting}
-                      total={total}
+                      total={totalAfterGiftCard}
                     />
                   </Elements>
                 ) : (
@@ -790,7 +952,9 @@ export default function OnlineOrderPage() {
                       >
                         {submitting
                           ? 'Processing...'
-                          : `Pay $${(total / 100).toFixed(2)}`}
+                          : totalAfterGiftCard === 0
+                            ? 'Place Order (Gift Card)'
+                            : `Pay $${(totalAfterGiftCard / 100).toFixed(2)}`}
                       </Button>
                     ) : (
                       <Button
@@ -800,7 +964,9 @@ export default function OnlineOrderPage() {
                       >
                         {submitting
                           ? 'Placing Order...'
-                          : `Place Order — $${(total / 100).toFixed(2)}`}
+                          : totalAfterGiftCard === 0
+                            ? 'Place Order (Gift Card)'
+                            : `Place Order — $${(totalAfterGiftCard / 100).toFixed(2)}`}
                       </Button>
                     )}
                   </form>

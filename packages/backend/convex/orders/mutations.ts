@@ -240,7 +240,7 @@ export const recordPayment = mutation({
     tenantId: v.id("tenants"),
     orderId: v.id("orders"),
     amount: v.number(),
-    method: v.union(v.literal("card"), v.literal("cash")),
+    method: v.union(v.literal("card"), v.literal("cash"), v.literal("gift_card")),
     stripePaymentIntentId: v.optional(v.string()),
     stripeChargeId: v.optional(v.string()),
     cashReceived: v.optional(v.number()),
@@ -248,6 +248,8 @@ export const recordPayment = mutation({
     tip: v.optional(v.number()),
     tipAmount: v.optional(v.number()),
     tipMethod: v.optional(v.union(v.literal("cash"), v.literal("card"))),
+    giftCardCode: v.optional(v.string()),
+    giftCardId: v.optional(v.id("giftCards")),
   },
   handler: async (ctx, args) => {
     const user = await requireTenantAccess(ctx);

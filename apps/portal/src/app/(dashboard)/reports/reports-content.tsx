@@ -48,6 +48,9 @@ import {
   ChevronUp,
   Star,
   AlertTriangle,
+  Gift,
+  Wallet,
+  Activity,
 } from 'lucide-react';
 import Link from 'next/link';
 import { formatCents } from '@/lib/format';
@@ -56,7 +59,7 @@ import { formatCents } from '@/lib/format';
 // Types
 // ────────────────────────────────────────────
 
-type TabId = 'dashboard' | 'sales' | 'dayparts' | 'staff' | 'menu' | 'engineering' | 'financial' | 'waste' | 'comparison' | 'tips';
+type TabId = 'dashboard' | 'sales' | 'dayparts' | 'staff' | 'menu' | 'engineering' | 'financial' | 'waste' | 'comparison' | 'tips' | 'gift_cards';
 type DatePreset = 'today' | 'yesterday' | 'this_week' | 'this_month' | 'custom';
 
 interface TabDef {
@@ -75,6 +78,7 @@ const TABS: TabDef[] = [
   { id: 'waste', label: 'Waste' },
   { id: 'comparison', label: 'Comparison' },
   { id: 'tips', label: 'Tips' },
+  { id: 'gift_cards', label: 'Gift Cards' },
 ];
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -334,6 +338,10 @@ export default function ReportsPage() {
     api.reports.queries.getWasteReport,
     activeTab === 'waste' ? queryArgs : 'skip'
   );
+  const giftCardLiability = useQuery(
+    api.giftCards.queries.getLiabilityReport,
+    activeTab === 'gift_cards' && tenantId ? { tenantId } : 'skip'
+  );
   const exportData = useQuery(
     api.reports.queries.exportReportData,
     queryArgs
@@ -491,6 +499,9 @@ export default function ReportsPage() {
       )}
       {activeTab === 'tips' && (
         <TipsTab data={tipReport} />
+      )}
+      {activeTab === 'gift_cards' && (
+        <GiftCardTab data={giftCardLiability} />
       )}
     </div>
   );
@@ -2238,6 +2249,214 @@ function WasteTab({ data }: { data: WasteData | undefined }) {
                 ))}
               </TableBody>
             </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────
+// Gift Card Tab
+// ────────────────────────────────────────────
+
+interface GiftCardLiabilityData {
+  totalOutstandingCents: number;
+  totalIssuedCents: number;
+  activeCardCount: number;
+  redemptionRate: number;
+  breakageEstimateCents: number;
+  cards: Array<{
+    code: string;
+    initialAmountCents: number;
+    currentBalanceCents: number;
+    status: string;
+    lastUsedAt?: number;
+    createdAt: number;
+  }>;
+}
+
+function GiftCardTab({ data }: { data: GiftCardLiabilityData | undefined }) {
+  const { sortKey, sortDir, toggle, sort } = useSortable<GiftCardLiabilityData['cards'][number]>('currentBalanceCents');
+
+  if (!data) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <p className="text-sm text-muted-foreground text-center py-6">Loading gift card data...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const {
+    totalOutstandingCents,
+    totalIssuedCents,
+    activeCardCount,
+    redemptionRate,
+    breakageEstimateCents,
+    cards,
+  } = data;
+
+  const sortedCards = sort(cards);
+
+  const STATUS_BADGE: Record<string, string> = {
+    active: 'bg-green-100 text-green-800',
+    redeemed: 'bg-blue-100 text-blue-800',
+    expired: 'bg-gray-100 text-gray-800',
+    disabled: 'bg-red-100 text-red-800',
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Summary cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Outstanding Liability
+            </CardTitle>
+            <Wallet className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${formatCents(totalOutstandingCents)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Issued
+            </CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${formatCents(totalIssuedCents)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Active Cards
+            </CardTitle>
+            <Gift className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{activeCardCount}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Redemption Rate
+            </CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{redemptionRate.toFixed(1)}%</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Breakage Estimate
+            </CardTitle>
+            <TrendingDown className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-amber-600">
+              ${formatCents(breakageEstimateCents)}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Active cards table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Gift className="h-4 w-4" />
+            Gift Cards ({cards.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {cards.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              No gift cards have been issued yet.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortHeader
+                      label="Code"
+                      sortKey="code"
+                      currentKey={String(sortKey)}
+                      currentDir={sortDir}
+                      onToggle={toggle}
+                    />
+                    <SortHeader
+                      label="Initial Amount"
+                      sortKey="initialAmountCents"
+                      currentKey={String(sortKey)}
+                      currentDir={sortDir}
+                      onToggle={toggle}
+                      className="text-right"
+                    />
+                    <SortHeader
+                      label="Current Balance"
+                      sortKey="currentBalanceCents"
+                      currentKey={String(sortKey)}
+                      currentDir={sortDir}
+                      onToggle={toggle}
+                      className="text-right"
+                    />
+                    <SortHeader
+                      label="Status"
+                      sortKey="status"
+                      currentKey={String(sortKey)}
+                      currentDir={sortDir}
+                      onToggle={toggle}
+                    />
+                    <SortHeader
+                      label="Last Used"
+                      sortKey="lastUsedAt"
+                      currentKey={String(sortKey)}
+                      currentDir={sortDir}
+                      onToggle={toggle}
+                    />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedCards.map((card) => (
+                    <TableRow key={card.code}>
+                      <TableCell className="font-mono text-sm tracking-wider">
+                        {card.code}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        ${formatCents(card.initialAmountCents)}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        ${formatCents(card.currentBalanceCents)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={STATUS_BADGE[card.status] ?? 'bg-gray-100 text-gray-800'}
+                        >
+                          {card.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {card.lastUsedAt
+                          ? new Date(card.lastUsedAt).toLocaleDateString()
+                          : 'Never'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

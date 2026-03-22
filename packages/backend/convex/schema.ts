@@ -577,10 +577,15 @@ export default defineSchema({
       v.union(
         v.literal("card"),
         v.literal("cash"),
-        v.literal("split")
+        v.literal("split"),
+        v.literal("gift_card")
       )
     ),
     stripePaymentIntentId: v.optional(v.string()),
+
+    // Gift card payment fields
+    giftCardCode: v.optional(v.string()),
+    giftCardAmountCents: v.optional(v.number()),
 
     // Discount / Comp
     discountId: v.optional(v.id("discounts")),
@@ -664,7 +669,8 @@ export default defineSchema({
     amount: v.number(), // cents
     method: v.union(
       v.literal("card"),
-      v.literal("cash")
+      v.literal("cash"),
+      v.literal("gift_card")
     ),
     status: v.union(
       v.literal("pending"),
@@ -1295,4 +1301,39 @@ export default defineSchema({
     .index("by_tenantId_status", ["tenantId", "status"])
     .index("by_orderId", ["orderId"])
     .index("by_externalId", ["externalId"]),
+
+  // ==================== Gift Cards ====================
+  giftCards: defineTable({
+    tenantId: v.id("tenants"),
+    code: v.string(),
+    balanceCents: v.number(),
+    initialAmountCents: v.number(),
+    status: v.union(v.literal("active"), v.literal("depleted"), v.literal("disabled")),
+    isDigital: v.boolean(),
+    purchaserName: v.string(),
+    purchaserEmail: v.optional(v.string()),
+    recipientName: v.optional(v.string()),
+    recipientEmail: v.optional(v.string()),
+    message: v.optional(v.string()),
+    stripePaymentIntentId: v.optional(v.string()),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+  })
+    .index("by_tenantId", ["tenantId"])
+    .index("by_code", ["code"])
+    .index("by_tenantId_status", ["tenantId", "status"]),
+
+  // ==================== Gift Card Transactions ====================
+  giftCardTransactions: defineTable({
+    tenantId: v.id("tenants"),
+    giftCardId: v.id("giftCards"),
+    type: v.union(v.literal("purchase"), v.literal("reload"), v.literal("redeem")),
+    amountCents: v.number(),
+    orderId: v.optional(v.id("orders")),
+    staffId: v.optional(v.id("users")),
+    note: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_giftCardId", ["giftCardId"])
+    .index("by_tenantId", ["tenantId"]),
 });
