@@ -6,6 +6,6 @@
   "types": "./src/index.ts",
   "dependencies": {
     "jose": "^5.0.0",
-    "convex": "^1.0.0"
+    "convex": "^1.34.0"
   }
 }
