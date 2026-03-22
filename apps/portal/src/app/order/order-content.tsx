@@ -105,8 +105,8 @@ export default function OnlineOrderPage() {
   const [giftCardError, setGiftCardError] = useState<string | null>(null);
   const [giftCardChecking, setGiftCardChecking] = useState(false);
   const [showGiftCardInput, setShowGiftCardInput] = useState(false);
-  const publicCheckBalance = useMutation(api.giftCards.mutations.publicCheckBalance);
-  const redeemGiftCard = useMutation(api.giftCards.mutations.redeemGiftCard);
+  const publicCheckBalance = useMutation((api as any).giftCards.mutations.publicCheckBalance);
+  const redeemGiftCard = useMutation((api as any).giftCards.mutations.redeemGiftCard);
 
   // Validate delivery zip code when it changes
   const zipValidationQuery = useQuery(

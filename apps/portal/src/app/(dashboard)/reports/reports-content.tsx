@@ -339,7 +339,7 @@ export default function ReportsPage() {
     activeTab === 'waste' ? queryArgs : 'skip'
   );
   const giftCardLiability = useQuery(
-    api.giftCards.queries.getLiabilityReport,
+    (api as any).giftCards.queries.getLiabilityReport,
     activeTab === 'gift_cards' && tenantId ? { tenantId } : 'skip'
   );
   const exportData = useQuery(

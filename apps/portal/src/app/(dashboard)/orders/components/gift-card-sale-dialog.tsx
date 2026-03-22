@@ -36,7 +36,7 @@ export function GiftCardSaleDialog({
   onOpenChange,
   tenantId,
 }: GiftCardSaleDialogProps) {
-  const purchaseGiftCard = useMutation(api.giftCards.mutations.purchaseGiftCard);
+  const purchaseGiftCard = useMutation((api as any).giftCards.mutations.purchaseGiftCard);
 
   const [phase, setPhase] = useState<DialogPhase>('configure');
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
