@@ -18,6 +18,10 @@ const orderItemValidator = v.object({
   ),
   specialInstructions: v.optional(v.string()),
   lineTotal: v.number(),
+  isVoided: v.optional(v.boolean()),
+  voidedBy: v.optional(v.string()),
+  voidReason: v.optional(v.string()),
+  course: v.optional(v.number()),
 });
 
 export const create = mutation({
@@ -563,6 +567,207 @@ export const compOrder = mutation({
     });
 
     return { compedAmount: activeSubtotal };
+  },
+});
+
+// ==================== Tab Management ====================
+
+export const openTab = mutation({
+  args: {
+    tenantId: v.id("tenants"),
+    customerName: v.string(),
+    serverId: v.optional(v.id("users")),
+    serverName: v.optional(v.string()),
+    tableId: v.optional(v.id("tables")),
+    tableName: v.optional(v.string()),
+    tabCardPaymentMethodId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    if (currentUser.tenantId !== args.tenantId) {
+      throw new Error("Forbidden: cannot open tabs for another tenant");
+    }
+
+    // Generate order number (same daily counter pattern as create)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStart = today.getTime();
+
+    const todayOrders = await ctx.db
+      .query("orders")
+      .withIndex("by_tenantId_createdAt", (q) =>
+        q.eq("tenantId", args.tenantId).gte("createdAt", todayStart)
+      )
+      .collect();
+
+    const orderNumber = todayOrders.length + 1;
+
+    const now = Date.now();
+    const orderId = await ctx.db.insert("orders", {
+      tenantId: args.tenantId,
+      orderNumber,
+      source: "dine_in",
+      status: "open",
+      items: [],
+      subtotal: 0,
+      tax: 0,
+      total: 0,
+      paymentStatus: "unpaid",
+      isTab: true,
+      tabStatus: "open",
+      tabOpenedAt: now,
+      tabCustomerName: args.customerName,
+      tabCardPaymentMethodId: args.tabCardPaymentMethodId,
+      serverId: args.serverId,
+      serverName: args.serverName,
+      tableId: args.tableId,
+      tableName: args.tableName,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // If table provided, mark it as occupied
+    if (args.tableId) {
+      await ctx.db.patch(args.tableId, {
+        status: "occupied",
+        currentOrderId: orderId,
+      });
+    }
+
+    return { orderId, orderNumber };
+  },
+});
+
+export const addToTab = mutation({
+  args: {
+    orderId: v.id("orders"),
+    items: v.array(orderItemValidator),
+  },
+  handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+    if (order.tenantId !== currentUser.tenantId) {
+      throw new Error("Forbidden: order belongs to another tenant");
+    }
+    if (!order.isTab || order.tabStatus !== "open") {
+      throw new Error("Order is not an open tab");
+    }
+
+    // Look up tenant for tax rate
+    const tenant = await ctx.db.get(order.tenantId);
+    const taxRate = tenant?.taxRate ?? 0;
+
+    // Append new items to existing
+    const allItems = [...order.items, ...args.items];
+
+    // Recalculate totals from all non-voided items
+    const subtotal = allItems.reduce((sum, item) => {
+      if (item.isVoided) return sum;
+      return sum + item.lineTotal;
+    }, 0);
+    const tax = Math.round(subtotal * taxRate);
+    const discountAmount = order.discountAmount ?? 0;
+    const tip = order.tip ?? 0;
+    const total = Math.max(0, subtotal - discountAmount + tax + tip);
+
+    await ctx.db.patch(args.orderId, {
+      items: allItems,
+      subtotal,
+      tax,
+      total,
+      updatedAt: Date.now(),
+    });
+
+    // Create KDS tickets for the NEW items only (same pattern as updateStatus sent_to_kitchen)
+    const SOURCE_LABELS: Record<string, string> = {
+      dine_in: "Dine-In",
+      online: "Online",
+      doordash: "DoorDash",
+      ubereats: "Uber Eats",
+      grubhub: "Grubhub",
+    };
+
+    const ticketItems = await Promise.all(
+      args.items.map(async (item) => {
+        const menuItem = await ctx.db.get(item.menuItemId);
+        return {
+          name: item.name,
+          quantity: item.quantity,
+          modifiers: item.modifiers?.map((m: { name: string }) => m.name),
+          specialInstructions: item.specialInstructions,
+          station: menuItem?.station,
+          course: item.course ?? 1,
+          isBumped: false,
+        };
+      })
+    );
+
+    if (ticketItems.length > 0) {
+      await ctx.db.insert("kdsTickets", {
+        tenantId: order.tenantId,
+        orderId: args.orderId,
+        orderNumber: order.orderNumber,
+        source: order.source,
+        sourceBadge: SOURCE_LABELS[order.source] ?? order.source,
+        status: "new",
+        items: ticketItems,
+        courseNumber: 1,
+        tableName: order.tableName,
+        customerName: order.tabCustomerName ?? order.customerName,
+        estimatedPickupTime: order.estimatedPickupTime,
+        receivedAt: Date.now(),
+      });
+    }
+
+    // Deduct inventory for the new items
+    await deductInventoryForOrder(ctx, order.tenantId, args.items, args.orderId);
+  },
+});
+
+export const closeTab = mutation({
+  args: {
+    orderId: v.id("orders"),
+  },
+  handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+    if (order.tenantId !== currentUser.tenantId) {
+      throw new Error("Forbidden: order belongs to another tenant");
+    }
+    if (!order.isTab || order.tabStatus !== "open") {
+      throw new Error("Order is not an open tab");
+    }
+
+    const now = Date.now();
+
+    await ctx.db.patch(args.orderId, {
+      tabStatus: "closed",
+      status: "completed",
+      completedAt: now,
+      updatedAt: now,
+    });
+
+    // Free the table if one is assigned
+    if (order.tableId) {
+      await ctx.db.patch(order.tableId, {
+        status: "open",
+        currentOrderId: undefined,
+      });
+    }
+
+    // Auto-earn loyalty points on final subtotal
+    await autoEarnLoyaltyPoints(
+      ctx,
+      order.tenantId,
+      args.orderId,
+      order.subtotal,
+      order.customerEmail,
+      order.customerPhone
+    );
   },
 });
 

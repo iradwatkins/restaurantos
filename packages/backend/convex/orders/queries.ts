@@ -1,5 +1,6 @@
 import { query } from "../_generated/server";
 import { v } from "convex/values";
+import { requireTenantAccess } from "../lib/tenant_auth";
 
 export const getByTenant = query({
   args: { tenantId: v.id("tenants") },
@@ -93,5 +94,25 @@ export const listByDateRange = query({
           .lte("createdAt", args.endDate)
       )
       .collect();
+  },
+});
+
+export const getOpenTabs = query({
+  args: { tenantId: v.id("tenants") },
+  handler: async (ctx, args) => {
+    await requireTenantAccess(ctx);
+
+    const tabs = await ctx.db
+      .query("orders")
+      .withIndex("by_tenantId_isTab_tabStatus", (q) =>
+        q
+          .eq("tenantId", args.tenantId)
+          .eq("isTab", true)
+          .eq("tabStatus", "open")
+      )
+      .collect();
+
+    // Sort by tabOpenedAt ascending (oldest first)
+    return tabs.sort((a, b) => (a.tabOpenedAt ?? 0) - (b.tabOpenedAt ?? 0));
   },
 });

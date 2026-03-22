@@ -632,6 +632,13 @@ export default defineSchema({
     // Course firing
     firedCourses: v.optional(v.array(v.number())), // tracks which courses have been fired to KDS
 
+    // Tab (open tab / bar tab)
+    isTab: v.optional(v.boolean()),
+    tabStatus: v.optional(v.union(v.literal("open"), v.literal("closed"))),
+    tabCustomerName: v.optional(v.string()),
+    tabCardPaymentMethodId: v.optional(v.string()), // Stripe PaymentMethod ID from SetupIntent
+    tabOpenedAt: v.optional(v.number()),
+
     // Timestamps
     createdAt: v.number(),
     sentToKitchenAt: v.optional(v.number()),
@@ -647,7 +654,8 @@ export default defineSchema({
     .index("by_tenantId_createdAt", ["tenantId", "createdAt"])
     .index("by_tenantId_orderNumber", ["tenantId", "orderNumber"])
     .index("by_tenantId_offlineId", ["tenantId", "offlineId"])
-    .index("by_tableId", ["tableId"]),
+    .index("by_tableId", ["tableId"])
+    .index("by_tenantId_isTab_tabStatus", ["tenantId", "isTab", "tabStatus"]),
 
   // ==================== POS: Payments ====================
   payments: defineTable({

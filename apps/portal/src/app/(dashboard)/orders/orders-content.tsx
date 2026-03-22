@@ -31,7 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from '@restaurantos/ui';
-import { Plus, ShoppingBag, CreditCard, DollarSign, Send, Wine, X, Tag, Ban, Gift, Printer, Loader2, CheckCircle2, AlertCircle, RefreshCw, Star, Truck, Flame } from 'lucide-react';
+import { Plus, ShoppingBag, CreditCard, DollarSign, Send, Wine, X, Tag, Ban, Gift, Printer, Loader2, CheckCircle2, AlertCircle, RefreshCw, Star, Truck, Flame, Clock, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { CashTender } from '@/components/cash-tender';
 import { ConnectionBadge } from '@/components/connection-badge';
@@ -56,6 +56,7 @@ import { CompDialog } from './components/comp-dialog';
 import { CustomerLookup } from './components/customer-lookup';
 import { LoyaltyCheckoutSection, LoyaltyEarnedMessage } from './components/loyalty-checkout-section';
 import { DeliveryPanel } from './components/delivery-panel';
+import { OpenTabDialog } from './components/open-tab-dialog';
 
 const ALCOHOL_TYPES = ['beer', 'wine', 'spirits'];
 
@@ -234,6 +235,16 @@ export default function OrdersPage() {
   const [deliveryOrderId, setDeliveryOrderId] = useState<string | null>(null);
   const doordashEnabled = tenant?.doordashDriveEnabled ?? false;
 
+  // Tab management state
+  const [showOpenTab, setShowOpenTab] = useState(false);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const openTabs = useQuery(
+    api.orders.queries.getOpenTabs,
+    tenantId ? { tenantId } : 'skip'
+  );
+  const addToTabMut = useMutation(api.orders.mutations.addToTab);
+  const closeTabMut = useMutation(api.orders.mutations.closeTab);
+
   if (!tenantId) {
     return <div className="p-6 text-muted-foreground">Loading...</div>;
   }
@@ -317,6 +328,27 @@ export default function OrdersPage() {
   async function handleSubmitOrder() {
     if (cart.length === 0) {
       toast.error('Add items to the order first');
+      return;
+    }
+
+    // Tab mode: add items to existing tab instead of creating a new order
+    if (activeTabId) {
+      try {
+        await addToTabMut({
+          orderId: activeTabId as Id<'orders'>,
+          items: cart.map((item) => ({
+            ...item,
+            course: item.course ?? 1,
+          })),
+        });
+        toast.success('Items added to tab');
+        setCart([]);
+        setActiveTabId(null);
+        setShowNewOrder(false);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to add items to tab';
+        toast.error(message);
+      }
       return;
     }
 
@@ -465,6 +497,12 @@ export default function OrdersPage() {
       });
       await updateOrderStatus({ orderId, status: 'completed' });
 
+      // Close tab if this order is a tab
+      const paidOrder = activeOrders?.find((o) => o._id === orderId);
+      if (paidOrder?.isTab && paidOrder.tabStatus === 'open') {
+        await closeTabMut({ orderId });
+      }
+
       toast.success('Card payment successful', {
         action: tenant
           ? {
@@ -525,6 +563,12 @@ export default function OrdersPage() {
       });
       await updateOrderStatus({ orderId, status: 'completed' });
 
+      // Close tab if this order is a tab
+      const paidOrder = activeOrders?.find((o) => o._id === orderId);
+      if (paidOrder?.isTab && paidOrder.tabStatus === 'open') {
+        await closeTabMut({ orderId });
+      }
+
       toast.success('Card payment successful', {
         action: tenant
           ? {
@@ -583,6 +627,13 @@ export default function OrdersPage() {
         tipMethod,
       });
       await updateOrderStatus({ orderId, status: 'completed' });
+
+      // Close tab if this order is a tab
+      const paidOrder = activeOrders?.find((o) => o._id === orderId);
+      if (paidOrder?.isTab && paidOrder.tabStatus === 'open') {
+        await closeTabMut({ orderId });
+      }
+
       toast.success('Cash payment recorded, order completed', {
         action: tenant
           ? {
@@ -654,12 +705,120 @@ export default function OrdersPage() {
               Sync ({pendingCount})
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={() => setShowOpenTab(true)}
+          >
+            <Users className="mr-2 h-4 w-4" />
+            Open Tab
+            {(openTabs?.length ?? 0) > 0 && (
+              <Badge className="ml-2" variant="secondary">
+                {openTabs?.length}
+              </Badge>
+            )}
+          </Button>
           <Button onClick={() => setShowNewOrder(!showNewOrder)}>
             <Plus className="mr-2 h-4 w-4" />
             New Order
           </Button>
         </div>
       </div>
+
+      {/* Open Tabs Panel */}
+      {openTabs && openTabs.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Open Tabs ({openTabs.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {openTabs.map((tab: any) => {
+                const openedAt = tab.tabOpenedAt as number;
+                const elapsedMs = Date.now() - openedAt;
+                const elapsedMinutes = Math.floor(elapsedMs / 60000);
+                const elapsedHours = Math.floor(elapsedMinutes / 60);
+                const remainderMinutes = elapsedMinutes % 60;
+                const timeDisplay =
+                  elapsedHours > 0
+                    ? `${elapsedHours}h ${remainderMinutes}m`
+                    : `${elapsedMinutes}m`;
+
+                const isWarning = elapsedMinutes >= 240 && elapsedMinutes < 480;
+                const isDanger = elapsedMinutes >= 480;
+
+                const borderClass = isDanger
+                  ? 'border-red-500'
+                  : isWarning
+                    ? 'border-yellow-500'
+                    : 'border-border';
+
+                const itemCount = (tab.items as any[]).filter(
+                  (i: any) => !i.isVoided
+                ).length;
+
+                return (
+                  <div
+                    key={tab._id}
+                    className={`rounded-lg border-2 ${borderClass} p-4 space-y-3`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-bold text-sm">
+                          {tab.tabCustomerName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          #{tab.orderNumber}
+                          {tab.tableName && ` \u00b7 ${tab.tableName}`}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-sm">
+                          ${formatCents(tab.total)}
+                        </p>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          <span>{timeDisplay}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      {itemCount} {itemCount === 1 ? 'item' : 'items'}
+                    </p>
+
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                          setActiveTabId(tab._id);
+                          setShowNewOrder(true);
+                        }}
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add Items
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="flex-1"
+                        onClick={() => setShowPayDialog(tab._id)}
+                      >
+                        <CreditCard className="h-3 w-3 mr-1" />
+                        Close Tab
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* New Order - POS Terminal */}
       {showNewOrder && (
@@ -732,7 +891,12 @@ export default function OrdersPage() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base flex items-center gap-2">
                     <ShoppingBag className="h-4 w-4" />
-                    Order
+                    {activeTabId ? 'Add to Tab' : 'Order'}
+                    {activeTabId && (
+                      <Badge variant="secondary" className="text-xs">
+                        TAB
+                      </Badge>
+                    )}
                   </CardTitle>
                   {tables && tables.length > 0 && (
                     <select
@@ -825,8 +989,27 @@ export default function OrdersPage() {
 
                     <Button className="w-full" onClick={handleSubmitOrder}>
                       <Send className="mr-2 h-4 w-4" />
-                      {isOnline ? 'Place Order' : 'Save Offline Order'}
+                      {activeTabId
+                        ? 'Add to Tab'
+                        : isOnline
+                          ? 'Place Order'
+                          : 'Save Offline Order'}
                     </Button>
+                    {activeTabId && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-muted-foreground"
+                        onClick={() => {
+                          setActiveTabId(null);
+                          setCart([]);
+                          setShowNewOrder(false);
+                        }}
+                      >
+                        <X className="h-3 w-3 mr-1" />
+                        Cancel Tab Addition
+                      </Button>
+                    )}
                   </>
                 )}
               </CardContent>
@@ -866,7 +1049,19 @@ export default function OrdersPage() {
                 const isModifiable = order.status !== 'completed' && order.status !== 'cancelled';
                 return (
                   <TableRow key={order._id}>
-                    <TableCell className="font-mono font-bold">#{order.orderNumber}</TableCell>
+                    <TableCell className="font-mono font-bold">
+                      <span>#{order.orderNumber}</span>
+                      {order.isTab && (
+                        <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0 h-4 border-blue-400 text-blue-600">
+                          TAB
+                        </Badge>
+                      )}
+                      {order.tabCustomerName && (
+                        <span className="block text-xs font-normal text-muted-foreground mt-0.5">
+                          {order.tabCustomerName}
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="capitalize">
                         {order.source.replace('_', ' ')}
@@ -986,7 +1181,15 @@ export default function OrdersPage() {
       <Dialog open={!!showPayDialog} onOpenChange={() => { setShowPayDialog(null); resetTipState(); setShowCardPayment(false); setCardPaymentPhase('connecting'); setCardPaymentError(null); stripeTerminal.cancelCollect(); squareTerminal.cancelCollect(); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Process Payment</DialogTitle>
+            <DialogTitle>
+              {(() => {
+                const dialogOrder = activeOrders?.find((o) => o._id === showPayDialog);
+                if (dialogOrder?.isTab) {
+                  return `Close Tab \u2014 ${dialogOrder.tabCustomerName}`;
+                }
+                return 'Process Payment';
+              })()}
+            </DialogTitle>
           </DialogHeader>
           {showPayDialog && (() => {
             const order = activeOrders?.find((o) => o._id === showPayDialog);
@@ -1315,6 +1518,15 @@ export default function OrdersPage() {
         orderId={compTarget?.orderId as Id<"orders"> | null}
         orderNumber={compTarget?.orderNumber ?? 0}
         orderTotal={compTarget?.orderTotal ?? 0}
+      />
+
+      {/* Open Tab Dialog */}
+      <OpenTabDialog
+        open={showOpenTab}
+        onOpenChange={setShowOpenTab}
+        tenantId={tenantId!}
+        tables={(tables ?? []) as Array<{ _id: Id<'tables'>; name: string; status: string }>}
+        onTabOpened={() => setShowOpenTab(false)}
       />
 
       {/* Delivery Panel Dialog */}
