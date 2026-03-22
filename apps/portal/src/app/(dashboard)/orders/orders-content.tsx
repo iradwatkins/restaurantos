@@ -244,7 +244,6 @@ export default function OrdersPage() {
   const [giftCardError, setGiftCardError] = useState<string | null>(null);
   const [showGiftCardPayment, setShowGiftCardPayment] = useState(false);
   const [giftCardAppliedAmount, setGiftCardAppliedAmount] = useState(0);
-  const [giftCardRemainingMethod, setGiftCardRemainingMethod] = useState<'cash' | 'card' | null>(null);
   const publicCheckBalance = useMutation((api as any).giftCards.mutations.publicCheckBalance);
   const redeemGiftCard = useMutation((api as any).giftCards.mutations.redeemGiftCard);
 
