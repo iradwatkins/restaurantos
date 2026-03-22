@@ -498,7 +498,7 @@ export default function OrdersPage() {
   }
 
   async function handleGiftCardPayment(
-    orderId: string,
+    orderId: any,
     orderGrandTotal: number,
     tipCents: number,
   ) {
