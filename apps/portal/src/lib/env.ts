@@ -21,6 +21,7 @@ const envSchema = z.object({
 
   // Optional: Integrations
   KITCHENHUB_WEBHOOK_SECRET: z.string().optional(),
+  DOORDASH_WEBHOOK_SECRET: z.string().optional(),
 
   // Optional: Logging
   LOG_LEVEL: z.string().optional(),
@@ -48,6 +49,7 @@ function validateEnv() {
     JWT_SECRET: process.env.JWT_SECRET,
     AUTH_SECRET: process.env.AUTH_SECRET,
     KITCHENHUB_WEBHOOK_SECRET: process.env.KITCHENHUB_WEBHOOK_SECRET,
+    DOORDASH_WEBHOOK_SECRET: process.env.DOORDASH_WEBHOOK_SECRET,
     LOG_LEVEL: process.env.LOG_LEVEL,
   });
 }

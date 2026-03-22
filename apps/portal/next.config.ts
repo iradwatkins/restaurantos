@@ -7,9 +7,6 @@ const withAnalyze = withBundleAnalyzer({
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   transpilePackages: [
     '@restaurantos/ui',
     '@restaurantos/config',
@@ -35,7 +32,7 @@ const nextConfig: NextConfig = {
           {
             key: 'Content-Security-Policy',
             value:
-              "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.convex.cloud https://*.convex.site wss://*.convex.cloud; frame-ancestors 'none';",
+              `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.convex.cloud https://*.convex.site wss://*.convex.cloud ${process.env.NEXT_PUBLIC_CONVEX_URL || ''} ${(process.env.NEXT_PUBLIC_CONVEX_URL || '').replace('http://', 'ws://').replace('https://', 'wss://')}; frame-ancestors 'none';`,
           },
         ],
       },

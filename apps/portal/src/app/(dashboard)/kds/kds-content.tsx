@@ -24,6 +24,13 @@ function getTimerColor(elapsedMs: number): string {
   return 'text-red-600';
 }
 
+function getTimerUrgencyLabel(elapsedMs: number): string {
+  const minutes = elapsedMs / 60000;
+  if (minutes < 5) return '';
+  if (minutes < 10) return 'SLOW';
+  return 'LATE';
+}
+
 function formatTimer(elapsedMs: number): string {
   const totalSeconds = Math.floor(elapsedMs / 1000);
   const minutes = Math.floor(totalSeconds / 60);
@@ -41,9 +48,14 @@ function TicketTimer({ receivedAt }: { receivedAt: number }) {
     return () => clearInterval(interval);
   }, [receivedAt]);
 
+  const urgencyLabel = getTimerUrgencyLabel(elapsed);
+
   return (
     <span className={`font-mono text-lg font-bold ${getTimerColor(elapsed)}`}>
       {formatTimer(elapsed)}
+      {urgencyLabel && (
+        <span className="ml-1 text-xs font-bold align-middle">{urgencyLabel}</span>
+      )}
     </span>
   );
 }
@@ -67,7 +79,7 @@ export default function KDSPage() {
   const [showRecall, setShowRecall] = useState(false);
 
   if (!tenantId) {
-    return <div className="p-6 text-muted-foreground">Loading...</div>;
+    return <div role="status" aria-live="polite" className="p-6 text-muted-foreground">Loading...</div>;
   }
 
   async function handleBumpTicket(ticketId: Id<"kdsTickets">) {
@@ -135,7 +147,7 @@ export default function KDSPage() {
       )}
 
       {/* Ticket Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div aria-live="polite" aria-relevant="additions" className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {tickets?.map((ticket) => (
           <div
             key={ticket._id}

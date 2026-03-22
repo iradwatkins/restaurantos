@@ -2,7 +2,6 @@
 
 import { useQuery } from 'convex/react';
 import { api } from '@restaurantos/backend';
-import { useState, useEffect } from 'react';
 
 /**
  * Extract the subdomain from the current browser hostname.
@@ -34,11 +33,7 @@ function getSubdomain(): string | null {
  * Use this instead of tenants.queries.list + tenants?.[0].
  */
 export function useTenant() {
-  const [subdomain, setSubdomain] = useState<string | null>(null);
-
-  useEffect(() => {
-    setSubdomain(getSubdomain());
-  }, []);
+  const subdomain = typeof window !== 'undefined' ? getSubdomain() : null;
 
   const tenant = useQuery(
     api.tenants.queries.getBySubdomain,

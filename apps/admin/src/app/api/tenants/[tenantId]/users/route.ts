@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { api } from '@restaurantos/backend';
 import { convexClient } from '@/lib/auth/convex-client';
 import { Id } from '@restaurantos/backend/dataModel';
-import { hash } from 'bcryptjs';
 import { getSession } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 
@@ -45,12 +44,10 @@ export async function POST(
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const passwordHash = await hash(data.password, 12);
-
     const userId = await convexClient.mutation(api.users.mutations.create, {
       tenantId: tenantId as Id<'tenants'>,
       email: data.email,
-      passwordHash,
+      password: data.password,
       name: data.name,
       role: data.role,
     });

@@ -15,7 +15,7 @@ import { Button } from "@restaurantos/ui";
 import { Input } from "@restaurantos/ui";
 import { Label } from "@restaurantos/ui";
 import { Badge } from "@restaurantos/ui";
-import type { Id, Doc } from "@restaurantos/backend/dataModel";
+import type { Id } from "@restaurantos/backend/dataModel";
 
 type SplitMode = "equal" | "by_amount" | "by_item";
 

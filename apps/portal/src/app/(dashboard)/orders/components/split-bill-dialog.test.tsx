@@ -1,15 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useMutation } from 'convex/react';
-
 const { mockToast, mockUseMutation } = vi.hoisted(() => ({
   mockToast: { success: vi.fn(), error: vi.fn() },
   mockUseMutation: vi.fn(() => vi.fn()),
 }));
 
 vi.mock('convex/react', () => ({
-  useMutation: (...args: any[]) => mockUseMutation(...args),
+  useMutation: (...args: Parameters<typeof mockUseMutation>) => mockUseMutation(...args),
 }));
 
 vi.mock('@restaurantos/backend', () => ({

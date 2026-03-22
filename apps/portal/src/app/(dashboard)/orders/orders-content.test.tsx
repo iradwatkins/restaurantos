@@ -13,10 +13,24 @@ vi.mock('@restaurantos/backend', () => ({
   api: {
     orders: {
       queries: { getActiveOrders: 'getActiveOrders', getTables: 'getTables' },
-      mutations: { create: 'create', updateStatus: 'updateStatus', recordPayment: 'recordPayment' },
+      mutations: { create: 'create', updateStatus: 'updateStatus', recordPayment: 'recordPayment', applyDiscount: 'applyDiscount', removeDiscount: 'removeDiscount', voidItem: 'voidItem', compOrder: 'compOrder' },
     },
     menu: {
       queries: { getCategories: 'getCategories', getAvailableItems: 'getAvailableItems' },
+    },
+    customers: {
+      queries: { searchCustomers: 'searchCustomers' },
+    },
+    discounts: {
+      queries: { getActiveDiscounts: 'getActiveDiscounts' },
+    },
+    offline: {
+      mutations: { syncOfflineOrders: 'syncOfflineOrders' },
+      queries: { getMenuForOffline: 'getMenuForOffline' },
+    },
+    loyalty: {
+      queries: { getSettings: 'getSettings', getCustomerLoyalty: 'getCustomerLoyalty', getRewards: 'getRewards' },
+      mutations: { redeemReward: 'redeemReward' },
     },
   },
 }));
@@ -32,6 +46,27 @@ vi.mock('@/hooks/use-tenant', () => ({
 
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+}));
+
+vi.mock('@/hooks/use-online-status', () => ({
+  useOnlineStatus: () => ({ isOnline: true, connectionState: 'online', pendingCount: 0, syncStatus: null }),
+}));
+
+vi.mock('@/components/connection-badge', () => ({
+  ConnectionBadge: () => null,
+}));
+
+vi.mock('@/lib/offline/cache', () => ({
+  saveMenuCache: vi.fn(),
+  getMenuCache: vi.fn().mockResolvedValue(null),
+  savePendingOrder: vi.fn(),
+  getPendingOrders: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock('@/lib/offline/sync', () => ({
+  syncPendingOrders: vi.fn(),
+  forceSyncNow: vi.fn(),
+  refreshPendingCount: vi.fn(),
 }));
 
 vi.mock('date-fns', () => ({
@@ -289,7 +324,7 @@ describe('OrdersPage', () => {
   });
 
   it('shows toast error when Place Order is clicked with empty cart', async () => {
-    const user = userEvent.setup();
+    userEvent.setup();
     render(<OrdersPage />);
     // The Place Order button only appears when cart has items,
     // so we test handleSubmitOrder with empty cart by adding then removing
@@ -429,8 +464,6 @@ describe('OrdersPage', () => {
   });
 
   it('processes cash payment when Cash button is clicked', async () => {
-    const recordPaymentFn = vi.fn().mockResolvedValue(undefined);
-    const updateStatusFn = vi.fn().mockResolvedValue(undefined);
     // useMutation is called 3 times (createOrder, updateOrderStatus, recordPayment)
     // We need all mutations to return the same mock
     mockedUseMutation.mockReturnValue(vi.fn().mockResolvedValue(undefined) as any);
@@ -439,8 +472,11 @@ describe('OrdersPage', () => {
     render(<OrdersPage />);
     await user.click(screen.getByText('Pay'));
     await user.click(screen.getByText('Cash'));
+    // CashTender is now shown — click Exact then Complete Payment
+    await user.click(screen.getByText('Exact'));
+    await user.click(screen.getByText('Complete Payment'));
     // The mock function should have been called
-    expect(toast.success).toHaveBeenCalledWith('Cash payment recorded, order completed');
+    expect(toast.success).toHaveBeenCalledWith('Cash payment recorded, order completed', expect.anything());
   });
 
   it('shows toast info when Card button is clicked', async () => {
@@ -449,7 +485,7 @@ describe('OrdersPage', () => {
     await user.click(screen.getByText('Pay'));
     await user.click(screen.getByText('Card'));
     expect(toast.info).toHaveBeenCalledWith(
-      'Card payments require Stripe Terminal setup. Configure in Settings > Online Ordering.'
+      'Card payments require a payment processor. Configure in Settings > Payments.'
     );
   });
 
@@ -472,10 +508,10 @@ describe('OrdersPage', () => {
     expect(screen.getByText('dine in')).toBeInTheDocument();
   });
 
-  it('renders item count for orders', () => {
+  it('renders item names for orders', () => {
     render(<OrdersPage />);
-    const itemCounts = screen.getAllByText('1 items');
-    expect(itemCounts.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/Burger/)).toBeInTheDocument();
+    expect(screen.getByText(/Salad/)).toBeInTheDocument();
   });
 
   it('shows dash for orders without table name', () => {
@@ -597,6 +633,9 @@ describe('OrdersPage', () => {
     render(<OrdersPage />);
     await user.click(screen.getByText('Pay'));
     await user.click(screen.getByText('Cash'));
+    // CashTender is now shown — click Exact then Complete Payment
+    await user.click(screen.getByText('Exact'));
+    await user.click(screen.getByText('Complete Payment'));
     expect(toast.error).toHaveBeenCalledWith('Payment failed');
   });
 });

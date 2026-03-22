@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { headers, cookies } from 'next/headers';
+import { headers } from 'next/headers';
 import { extractSubdomain } from '@/lib/tenant';
 import { logger } from '@/lib/logger';
 

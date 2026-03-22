@@ -14,15 +14,16 @@ const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify session authentication
+    // Verify session authentication — always required
     const headersList = await headers();
     const host = headersList.get('host') || '';
     const subdomain = extractSubdomain(host);
-    if (subdomain) {
-      const session = await getSession(subdomain);
-      if (!session) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
+    if (!subdomain) {
+      return NextResponse.json({ error: 'Unauthorized: missing subdomain' }, { status: 401 });
+    }
+    const session = await getSession(subdomain);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { orderId, tenantId, type } = await request.json();

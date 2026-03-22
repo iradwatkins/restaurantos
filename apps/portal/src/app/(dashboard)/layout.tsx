@@ -20,10 +20,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex h-screen bg-background">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-4 focus:bg-background focus:text-foreground focus:underline"
+      >
+        Skip to content
+      </a>
       <PortalSidebar tenant={resolved.tenant} user={session.user} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <PortalHeader tenant={resolved.tenant} user={session.user} />
-        <main className="flex-1 overflow-y-auto overflow-x-hidden px-8 py-6">
+        <main id="main-content" className="flex-1 overflow-y-auto overflow-x-hidden px-8 py-6">
           <div className="max-w-7xl mx-auto">{children}</div>
         </main>
       </div>

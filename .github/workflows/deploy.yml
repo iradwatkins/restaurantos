@@ -2,12 +2,10 @@ name: Deploy
 
 on:
   workflow_dispatch:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
-    paths:
-      - 'apps/**'
-      - 'packages/**'
-      - 'pnpm-lock.yaml'
 
 concurrency:
   group: deploy
@@ -17,10 +15,21 @@ jobs:
   deploy:
     name: Build & Deploy to VPS
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # Only deploy when CI succeeded (or on manual dispatch which bypasses workflow_run)
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # For workflow_run events, check out the commit that triggered CI
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Set short SHA
+        id: sha
+        run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -30,19 +39,21 @@ jobs:
           docker build \
             -f apps/admin/Dockerfile \
             --build-arg NEXT_PUBLIC_CONVEX_URL=https://convex.restaurants.irawatkins.com \
-            -t restaurantos-admin:latest .
+            -t restaurantos-admin:latest \
+            -t restaurantos-admin:${{ steps.sha.outputs.short }} .
 
       - name: Build Portal image
         run: |
           docker build \
             -f apps/portal/Dockerfile \
             --build-arg NEXT_PUBLIC_CONVEX_URL=https://convex.restaurants.irawatkins.com \
-            -t restaurantos-portal:latest .
+            -t restaurantos-portal:latest \
+            -t restaurantos-portal:${{ steps.sha.outputs.short }} .
 
       - name: Save Docker images
         run: |
-          docker save restaurantos-admin:latest | gzip > admin.tar.gz
-          docker save restaurantos-portal:latest | gzip > portal.tar.gz
+          docker save restaurantos-admin:latest restaurantos-admin:${{ steps.sha.outputs.short }} | gzip > admin.tar.gz
+          docker save restaurantos-portal:latest restaurantos-portal:${{ steps.sha.outputs.short }} | gzip > portal.tar.gz
 
       - name: Copy images to VPS
         uses: appleboy/scp-action@v0.1.7
@@ -53,25 +64,169 @@ jobs:
           source: "admin.tar.gz,portal.tar.gz"
           target: /tmp/restaurantos-deploy
 
-      - name: Deploy on VPS
+      - name: Deploy with zero downtime
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          SHORT_SHA: ${{ steps.sha.outputs.short }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: SHORT_SHA
+          script: |
+            set -euo pipefail
+
+            cd /tmp/restaurantos-deploy
+            docker load < admin.tar.gz
+            docker load < portal.tar.gz
+
+            DEPLOY_TS=$(date +%s)
+            ADMIN_GREEN="restaurantos-admin-green-${DEPLOY_TS}"
+            PORTAL_GREEN="restaurantos-portal-green-${DEPLOY_TS}"
+
+            echo "=== Starting new containers (green) ==="
+
+            # Start new admin container on a temporary port
+            docker run -d \
+              --name "${ADMIN_GREEN}" \
+              --restart unless-stopped \
+              -p 3015:3005 \
+              --env-file /opt/restaurantos/.env \
+              --health-cmd "wget -qO- http://localhost:3005/api/health || exit 1" \
+              --health-interval 5s \
+              --health-timeout 5s \
+              --health-retries 5 \
+              --health-start-period 30s \
+              restaurantos-admin:${SHORT_SHA}
+
+            # Start new portal container on a temporary port
+            docker run -d \
+              --name "${PORTAL_GREEN}" \
+              --restart unless-stopped \
+              -p 3016:3006 \
+              --env-file /opt/restaurantos/.env \
+              --health-cmd "wget -qO- http://localhost:3006/api/health || exit 1" \
+              --health-interval 5s \
+              --health-timeout 5s \
+              --health-retries 5 \
+              --health-start-period 30s \
+              restaurantos-portal:${SHORT_SHA}
+
+            echo "=== Waiting for health checks ==="
+
+            # Wait for containers to become healthy (up to 90 seconds)
+            wait_healthy() {
+              local container_name="$1"
+              local max_attempts=18
+              local attempt=0
+              while [ $attempt -lt $max_attempts ]; do
+                STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "missing")
+                if [ "$STATUS" = "healthy" ]; then
+                  echo "${container_name} is healthy"
+                  return 0
+                fi
+                if [ "$STATUS" = "unhealthy" ]; then
+                  echo "ERROR: ${container_name} is unhealthy"
+                  docker logs --tail 50 "$container_name"
+                  return 1
+                fi
+                echo "  ${container_name}: ${STATUS} (attempt $((attempt+1))/${max_attempts})"
+                sleep 5
+                attempt=$((attempt+1))
+              done
+              echo "ERROR: ${container_name} did not become healthy within 90s"
+              docker logs --tail 50 "$container_name"
+              return 1
+            }
+
+            ADMIN_HEALTHY=0
+            PORTAL_HEALTHY=0
+
+            wait_healthy "${ADMIN_GREEN}" && ADMIN_HEALTHY=1
+            wait_healthy "${PORTAL_GREEN}" && PORTAL_HEALTHY=1
+
+            if [ "$ADMIN_HEALTHY" -ne 1 ] || [ "$PORTAL_HEALTHY" -ne 1 ]; then
+              echo "=== DEPLOY FAILED: Rolling back green containers ==="
+              docker stop "${ADMIN_GREEN}" 2>/dev/null || true
+              docker rm "${ADMIN_GREEN}" 2>/dev/null || true
+              docker stop "${PORTAL_GREEN}" 2>/dev/null || true
+              docker rm "${PORTAL_GREEN}" 2>/dev/null || true
+              rm -f admin.tar.gz portal.tar.gz
+              exit 1
+            fi
+
+            echo "=== Switching traffic: stop old, rename new ==="
+
+            # Stop and remove old containers (if they exist)
+            docker stop restaurantos-admin 2>/dev/null || true
+            docker rm restaurantos-admin 2>/dev/null || true
+            docker stop restaurantos-portal 2>/dev/null || true
+            docker rm restaurantos-portal 2>/dev/null || true
+
+            # Also clean up any leftover containers with the old naming convention
+            docker stop restaurantos-admin-app 2>/dev/null || true
+            docker rm restaurantos-admin-app 2>/dev/null || true
+            docker stop restaurantos-portal-app 2>/dev/null || true
+            docker rm restaurantos-portal-app 2>/dev/null || true
+
+            # Stop green containers, rename, restart on production ports
+            docker stop "${ADMIN_GREEN}"
+            docker rm "${ADMIN_GREEN}"
+            docker stop "${PORTAL_GREEN}"
+            docker rm "${PORTAL_GREEN}"
+
+            docker run -d \
+              --name restaurantos-admin \
+              --restart unless-stopped \
+              -p 3005:3005 \
+              --env-file /opt/restaurantos/.env \
+              --health-cmd "wget -qO- http://localhost:3005/api/health || exit 1" \
+              --health-interval 10s \
+              --health-timeout 5s \
+              --health-retries 3 \
+              --health-start-period 30s \
+              restaurantos-admin:${SHORT_SHA}
+
+            docker run -d \
+              --name restaurantos-portal \
+              --restart unless-stopped \
+              -p 3006:3006 \
+              --env-file /opt/restaurantos/.env \
+              --health-cmd "wget -qO- http://localhost:3006/api/health || exit 1" \
+              --health-interval 10s \
+              --health-timeout 5s \
+              --health-retries 3 \
+              --health-start-period 30s \
+              restaurantos-portal:${SHORT_SHA}
+
+            echo "=== Verifying production containers ==="
+            sleep 5
+            docker ps --filter "name=restaurantos-admin" --filter "name=restaurantos-portal" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+            # Prune old images (keep last 3 tagged versions)
+            echo "=== Cleaning up old images ==="
+            docker images restaurantos-admin --format "{{.Tag}}" | grep -v latest | sort -r | tail -n +4 | xargs -r -I{} docker rmi restaurantos-admin:{} 2>/dev/null || true
+            docker images restaurantos-portal --format "{{.Tag}}" | grep -v latest | sort -r | tail -n +4 | xargs -r -I{} docker rmi restaurantos-portal:{} 2>/dev/null || true
+
+            # Cleanup deploy artifacts
+            rm -f admin.tar.gz portal.tar.gz
+
+            echo "=== Deploy complete: ${SHORT_SHA} at $(date) ==="
+
+      - name: Verify deployment
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd /tmp/restaurantos-deploy
-            docker load < admin.tar.gz
-            docker load < portal.tar.gz
+            set -euo pipefail
+            sleep 10
 
-            # Restart containers (Coolify-managed — adjust if using docker-compose)
-            docker stop restaurantos-admin-app || true
-            docker rm restaurantos-admin-app || true
-            docker stop restaurantos-portal-app || true
-            docker rm restaurantos-portal-app || true
+            echo "=== Health check: Admin ==="
+            curl -sf --max-time 10 http://localhost:3005/api/health || { echo "FATAL: Admin health check failed"; exit 1; }
 
-            echo "Images loaded. Restart containers via Coolify dashboard or docker run commands."
-            echo "Deploy complete at $(date)"
+            echo "=== Health check: Portal ==="
+            curl -sf --max-time 10 http://localhost:3006/api/health || { echo "FATAL: Portal health check failed"; exit 1; }
 
-            # Cleanup
-            rm -f admin.tar.gz portal.tar.gz
+            echo "=== All services healthy ==="

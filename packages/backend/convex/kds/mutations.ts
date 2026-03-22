@@ -1,5 +1,6 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
+import { requireTenantAccess, assertTenantOwnership } from "../lib/tenant_auth";
 
 const SOURCE_LABELS: Record<string, string> = {
   dine_in: "Dine-In",
@@ -15,8 +16,14 @@ export const createTicket = mutation({
     orderId: v.id("orders"),
   },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    if (currentUser.tenantId !== args.tenantId) {
+      throw new Error("Forbidden: cannot create tickets for another tenant");
+    }
+
     const order = await ctx.db.get(args.orderId);
     if (!order) throw new Error("Order not found");
+    assertTenantOwnership(order, currentUser.tenantId);
 
     // Check if ticket already exists
     const existing = await ctx.db
@@ -53,8 +60,10 @@ export const createTicket = mutation({
 export const bumpTicket = mutation({
   args: { ticketId: v.id("kdsTickets") },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket) throw new Error("Ticket not found");
+    assertTenantOwnership(ticket, currentUser.tenantId);
 
     const now = Date.now();
 
@@ -95,8 +104,10 @@ export const bumpItem = mutation({
     itemIndex: v.number(),
   },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket) throw new Error("Ticket not found");
+    assertTenantOwnership(ticket, currentUser.tenantId);
 
     const updatedItems = [...ticket.items];
     if (args.itemIndex >= 0 && args.itemIndex < updatedItems.length) {
@@ -142,8 +153,10 @@ export const bumpItem = mutation({
 export const recallTicket = mutation({
   args: { ticketId: v.id("kdsTickets") },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
     const ticket = await ctx.db.get(args.ticketId);
     if (!ticket) throw new Error("Ticket not found");
+    assertTenantOwnership(ticket, currentUser.tenantId);
 
     // Reset all items
     const resetItems = ticket.items.map((i) => ({

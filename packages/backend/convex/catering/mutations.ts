@@ -1,5 +1,7 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
+import { Id } from "../_generated/dataModel";
+import { requireTenantAccess, assertTenantOwnership } from "../lib/tenant_auth";
 
 // ==================== Categories ====================
 
@@ -9,6 +11,11 @@ export const createCategory = mutation({
     name: v.string(),
   },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    if (currentUser.tenantId !== args.tenantId) {
+      throw new Error("Forbidden: cannot manage catering for another tenant");
+    }
+
     const existing = await ctx.db
       .query("cateringCategories")
       .withIndex("by_tenantId", (q) => q.eq("tenantId", args.tenantId))
@@ -32,6 +39,9 @@ export const updateCategory = mutation({
     isActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    const category = await ctx.db.get(args.id);
+    assertTenantOwnership(category, currentUser.tenantId);
     const { id, ...updates } = args;
     await ctx.db.patch(id, { ...updates, updatedAt: Date.now() });
   },
@@ -52,6 +62,11 @@ export const createItem = mutation({
     imageStorageId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    if (currentUser.tenantId !== args.tenantId) {
+      throw new Error("Forbidden: cannot manage catering for another tenant");
+    }
+
     return await ctx.db.insert("cateringMenuItems", {
       ...args,
       isAvailable: true,
@@ -75,6 +90,9 @@ export const updateItem = mutation({
     imageStorageId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    const item = await ctx.db.get(args.id);
+    assertTenantOwnership(item, currentUser.tenantId);
     const { id, ...updates } = args;
     await ctx.db.patch(id, { ...updates, updatedAt: Date.now() });
   },
@@ -83,6 +101,9 @@ export const updateItem = mutation({
 export const deleteItem = mutation({
   args: { id: v.id("cateringMenuItems") },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    const item = await ctx.db.get(args.id);
+    assertTenantOwnership(item, currentUser.tenantId);
     await ctx.db.delete(args.id);
   },
 });
@@ -103,6 +124,9 @@ export const updateOrderStatus = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    const order = await ctx.db.get(args.id);
+    assertTenantOwnership(order, currentUser.tenantId);
     await ctx.db.patch(args.id, {
       status: args.status,
       updatedAt: Date.now(),
@@ -117,6 +141,9 @@ export const recordDeposit = mutation({
     stripePaymentIntentId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    const order = await ctx.db.get(args.id);
+    assertTenantOwnership(order, currentUser.tenantId);
     await ctx.db.patch(args.id, {
       depositPaid: args.amount,
       depositPaidAt: Date.now(),
@@ -134,6 +161,9 @@ export const recordBalancePayment = mutation({
     stripePaymentIntentId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    const order = await ctx.db.get(args.id);
+    assertTenantOwnership(order, currentUser.tenantId);
     await ctx.db.patch(args.id, {
       balancePaidAt: Date.now(),
       balanceStripePaymentIntentId: args.stripePaymentIntentId,
@@ -144,6 +174,11 @@ export const recordBalancePayment = mutation({
 
 // ==================== Public: Place Catering Order ====================
 
+/**
+ * Place a catering order (no auth required — customer-facing).
+ * All prices are verified server-side from the database.
+ * Client-supplied price fields are ignored for calculations.
+ */
 export const placeCateringOrder = mutation({
   args: {
     tenantId: v.id("tenants"),
@@ -179,6 +214,78 @@ export const placeCateringOrder = mutation({
   handler: async (ctx, args) => {
     const now = Date.now();
 
+    // ── Verify tenant exists and is active ──
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant || tenant.status !== "active") {
+      throw new Error("Restaurant is not currently accepting catering orders");
+    }
+
+    if (args.items.length === 0) {
+      throw new Error("Order must contain at least one item");
+    }
+
+    // ── Server-side price verification ──
+    // Look up every catering menu item from the database and recalculate all prices.
+    // Client-supplied unitPrice, lineTotal, subtotal, tax, and total are ignored.
+
+    const verifiedItems: Array<{
+      cateringMenuItemId: Id<"cateringMenuItems">;
+      name: string;
+      quantity: number;
+      unitPrice: number;
+      lineTotal: number;
+    }> = [];
+
+    let serverSubtotal = 0;
+
+    for (const clientItem of args.items) {
+      const menuItem = await ctx.db.get(clientItem.cateringMenuItemId);
+      if (!menuItem) {
+        throw new Error(`Catering menu item not found: ${clientItem.cateringMenuItemId}`);
+      }
+      if (menuItem.tenantId !== args.tenantId) {
+        throw new Error("Catering menu item does not belong to this restaurant");
+      }
+      if (!menuItem.isAvailable) {
+        throw new Error(`"${menuItem.name}" is currently unavailable`);
+      }
+      if (clientItem.quantity < 1 || !Number.isInteger(clientItem.quantity)) {
+        throw new Error(`Invalid quantity for "${menuItem.name}"`);
+      }
+      if (menuItem.minimumQuantity && clientItem.quantity < menuItem.minimumQuantity) {
+        throw new Error(
+          `"${menuItem.name}" requires a minimum quantity of ${menuItem.minimumQuantity}`
+        );
+      }
+
+      // Use the database price, not the client-supplied price.
+      // Catering items can have either pricePerPerson or flatPrice.
+      let serverUnitPrice: number;
+      if (menuItem.pricePerPerson !== undefined && menuItem.pricePerPerson !== null) {
+        serverUnitPrice = menuItem.pricePerPerson;
+      } else if (menuItem.flatPrice !== undefined && menuItem.flatPrice !== null) {
+        serverUnitPrice = menuItem.flatPrice;
+      } else {
+        throw new Error(`"${menuItem.name}" has no price configured`);
+      }
+
+      const serverLineTotal = serverUnitPrice * clientItem.quantity;
+      serverSubtotal += serverLineTotal;
+
+      verifiedItems.push({
+        cateringMenuItemId: clientItem.cateringMenuItemId,
+        name: menuItem.name,
+        quantity: clientItem.quantity,
+        unitPrice: serverUnitPrice,
+        lineTotal: serverLineTotal,
+      });
+    }
+
+    // Calculate tax from the tenant's configured tax rate
+    const taxRate = tenant.taxRate ?? 0;
+    const serverTax = Math.round(serverSubtotal * taxRate);
+    const serverTotal = serverSubtotal + serverTax;
+
     // Generate order number
     const existing = await ctx.db
       .query("cateringOrders")
@@ -186,8 +293,8 @@ export const placeCateringOrder = mutation({
       .collect();
     const orderNumber = existing.length + 1;
 
-    // Deposit = 50% of total
-    const depositRequired = Math.round(args.total * 0.5);
+    // Deposit = 50% of server-calculated total
+    const depositRequired = Math.round(serverTotal * 0.5);
 
     const orderId = await ctx.db.insert("cateringOrders", {
       tenantId: args.tenantId,
@@ -201,12 +308,12 @@ export const placeCateringOrder = mutation({
       headcount: args.headcount,
       fulfillmentType: args.fulfillmentType,
       deliveryAddress: args.deliveryAddress,
-      items: args.items,
-      subtotal: args.subtotal,
-      tax: args.tax,
-      total: args.total,
+      items: verifiedItems,
+      subtotal: serverSubtotal,
+      tax: serverTax,
+      total: serverTotal,
       depositRequired,
-      balanceDue: args.total - depositRequired,
+      balanceDue: serverTotal - depositRequired,
       notes: args.notes,
       createdAt: now,
       updatedAt: now,

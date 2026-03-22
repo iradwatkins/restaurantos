@@ -122,14 +122,14 @@ describe('printReceipt', () => {
   it('includes order number in receipt', () => {
     printReceipt(baseOrder, 'Test Restaurant');
 
-    const writtenHtml = mockIframe.contentDocument.write.mock.calls[0][0];
+    const writtenHtml = mockIframe.contentDocument.write.mock.calls[0]![0];
     expect(writtenHtml).toContain('Order #42');
   });
 
   it('includes item names and prices', () => {
     printReceipt(baseOrder, 'Test Restaurant');
 
-    const writtenHtml = mockIframe.contentDocument.write.mock.calls[0][0];
+    const writtenHtml = mockIframe.contentDocument.write.mock.calls[0]![0];
     expect(writtenHtml).toContain('Burger');
     expect(writtenHtml).toContain('Fries');
     expect(writtenHtml).toContain('$24.00');
@@ -139,7 +139,7 @@ describe('printReceipt', () => {
   it('includes subtotal, tax, and total', () => {
     printReceipt(baseOrder, 'Test Restaurant');
 
-    const writtenHtml = mockIframe.contentDocument.write.mock.calls[0][0];
+    const writtenHtml = mockIframe.contentDocument.write.mock.calls[0]![0];
     expect(writtenHtml).toContain('Subtotal');
     expect(writtenHtml).toContain('$29.00');
     expect(writtenHtml).toContain('Tax');
@@ -151,28 +151,28 @@ describe('printReceipt', () => {
   it('includes table name when present', () => {
     printReceipt({ ...baseOrder, tableName: 'Table 5' }, 'Test Restaurant');
 
-    const writtenHtml = mockIframe.contentDocument.write.mock.calls[0][0];
+    const writtenHtml = mockIframe.contentDocument.write.mock.calls[0]![0];
     expect(writtenHtml).toContain('Table: Table 5');
   });
 
   it('includes customer name when present', () => {
     printReceipt({ ...baseOrder, customerName: 'John' }, 'Test Restaurant');
 
-    const writtenHtml = mockIframe.contentDocument.write.mock.calls[0][0];
+    const writtenHtml = mockIframe.contentDocument.write.mock.calls[0]![0];
     expect(writtenHtml).toContain('Customer: John');
   });
 
   it('includes payment method when present', () => {
     printReceipt({ ...baseOrder, paymentMethod: 'Visa' }, 'Test Restaurant');
 
-    const writtenHtml = mockIframe.contentDocument.write.mock.calls[0][0];
+    const writtenHtml = mockIframe.contentDocument.write.mock.calls[0]![0];
     expect(writtenHtml).toContain('Paid by: Visa');
   });
 
   it('includes Thank you message', () => {
     printReceipt(baseOrder, 'Test Restaurant');
 
-    const writtenHtml = mockIframe.contentDocument.write.mock.calls[0][0];
+    const writtenHtml = mockIframe.contentDocument.write.mock.calls[0]![0];
     expect(writtenHtml).toContain('Thank you!');
   });
 

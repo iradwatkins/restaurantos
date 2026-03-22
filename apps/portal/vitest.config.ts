@@ -8,9 +8,6 @@ export default defineConfig({
     include: ['**/*.test.ts', '**/*.test.tsx'],
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
-    environmentMatchGlobs: [
-      ['**/*.test.ts', 'node'],
-    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],

@@ -14,7 +14,7 @@ import { CalendarDays, Clock, Utensils, Star } from 'lucide-react';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-// Buffet pricing tier images — Black people (replace with better ones via portal)
+// Buffet pricing tier images
 const TIER_IMAGES: Record<string, string> = {
   'Adults': 'https://images.pexels.com/photos/6579011/pexels-photo-6579011.jpeg?auto=compress&cs=tinysrgb&w=800',
   'Seniors': 'https://images.pexels.com/photos/4261996/pexels-photo-4261996.jpeg?auto=compress&cs=tinysrgb&w=800',
@@ -22,17 +22,30 @@ const TIER_IMAGES: Record<string, string> = {
   'default': 'https://images.pexels.com/photos/6579011/pexels-photo-6579011.jpeg?auto=compress&cs=tinysrgb&w=800',
 };
 
-export default function EventsContent() {
-  const { tenantId } = useTenant();
+interface EventsContentProps {
+  initialData: {
+    tenantId: any;
+    events: any;
+    dailySpecials: any;
+  } | null;
+}
 
-  const events = useQuery(
+export default function EventsContent({ initialData }: EventsContentProps) {
+  const { tenantId: clientTenantId } = useTenant();
+
+  const tenantId = initialData?.tenantId ?? clientTenantId;
+
+  const clientEvents = useQuery(
     api.public.queries.getPublicEvents,
-    tenantId ? { tenantId } : 'skip'
+    !initialData && tenantId ? { tenantId } : 'skip'
   );
-  const dailySpecials = useQuery(
+  const clientDailySpecials = useQuery(
     api.public.queries.getDailySpecials,
-    tenantId ? { tenantId } : 'skip'
+    !initialData && tenantId ? { tenantId } : 'skip'
   );
+
+  const events = initialData?.events ?? clientEvents;
+  const dailySpecials = initialData?.dailySpecials ?? clientDailySpecials;
 
   const today = new Date().getDay();
 

@@ -34,12 +34,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const subdomain = extractSubdomain(host);
 
   let themeCSS = '';
+  let tenantName = 'RestaurantOS';
 
   if (subdomain) {
     try {
       const resolved = await resolveTenant(subdomain);
       if (resolved?.theme) {
         themeCSS = generateThemeCSS(resolved.theme);
+      }
+      if (resolved?.tenant?.name) {
+        tenantName = resolved.tenant.name;
       }
     } catch {
       // Convex may not be available during build
@@ -48,7 +52,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>{themeCSS && <style dangerouslySetInnerHTML={{ __html: themeCSS }} />}</head>
+      <head>
+        <title>{tenantName}</title>
+        {themeCSS && <style dangerouslySetInnerHTML={{ __html: themeCSS }} />}
+      </head>
       <body className={`${sansFont.variable} ${displayFont.variable} ${monoFont.variable} antialiased`}>
         <ThemeProvider
           attribute="class"

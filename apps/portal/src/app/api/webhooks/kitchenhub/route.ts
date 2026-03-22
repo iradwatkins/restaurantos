@@ -36,16 +36,21 @@ export async function POST(request: Request) {
   try {
     const rawBody = await request.text();
 
-    // Verify KitchenHub webhook signature
+    // Verify KitchenHub webhook signature — mandatory
     const webhookSecret = process.env.KITCHENHUB_WEBHOOK_SECRET;
-    if (webhookSecret) {
-      const signature = request.headers.get('x-kitchenhub-signature');
-      if (!signature) {
-        return NextResponse.json({ error: 'Missing webhook signature' }, { status: 401 });
-      }
-      if (!verifyWebhookSignature(rawBody, signature, webhookSecret)) {
-        return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 });
-      }
+    if (!webhookSecret) {
+      logger.error('KITCHENHUB_WEBHOOK_SECRET is not configured — rejecting webhook');
+      return NextResponse.json(
+        { error: 'Webhook signature verification is not configured' },
+        { status: 500 }
+      );
+    }
+    const signature = request.headers.get('x-kitchenhub-signature');
+    if (!signature) {
+      return NextResponse.json({ error: 'Missing webhook signature' }, { status: 401 });
+    }
+    if (!verifyWebhookSignature(rawBody, signature, webhookSecret)) {
+      return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 });
     }
 
     const payload = JSON.parse(rawBody);

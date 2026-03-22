@@ -4,7 +4,7 @@ import { useQuery } from 'convex/react';
 import { api } from '@restaurantos/backend';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { Badge, Card, CardContent, CardHeader, CardTitle } from '@restaurantos/ui';
+import { Card, CardContent, CardHeader, CardTitle } from '@restaurantos/ui';
 import { Store, DollarSign, ShoppingBag, Activity, Plus, ArrowRight, TrendingUp } from 'lucide-react';
 
 const container = {
@@ -14,7 +14,7 @@ const container = {
 
 const item = {
   hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' as const } },
 };
 
 export default function DashboardPage() {

@@ -8,13 +8,19 @@ import { Wine, UtensilsCrossed } from 'lucide-react';
 
 const ALCOHOL_TYPES = ['beer', 'wine', 'spirits'];
 
-export default function MenuShowcasePage() {
+interface MenuShowcaseProps {
+  initialMenu: any[] | null;
+}
+
+export default function MenuShowcasePage({ initialMenu }: MenuShowcaseProps) {
   const { tenantId } = useTenant();
 
-  const menu = useQuery(
+  const clientMenu = useQuery(
     api.public.queries.getFullMenu,
-    tenantId ? { tenantId } : 'skip'
+    !initialMenu && tenantId ? { tenantId } : 'skip'
   );
+
+  const menu = initialMenu ?? clientMenu;
 
   if (!menu) {
     return <div className="text-center py-20 text-muted-foreground">Loading menu...</div>;

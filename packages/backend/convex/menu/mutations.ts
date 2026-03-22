@@ -1,5 +1,6 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
+import { requireTenantAccess, assertTenantOwnership } from "../lib/tenant_auth";
 
 // ==================== Categories ====================
 
@@ -16,6 +17,11 @@ export const createCategory = mutation({
     visibleTo: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    if (currentUser.tenantId !== args.tenantId) {
+      throw new Error("Forbidden: cannot manage menu for another tenant");
+    }
+
     // Auto-calculate sort order if not provided
     let sortOrder = args.sortOrder ?? 0;
     if (!args.sortOrder) {
@@ -104,6 +110,11 @@ export const createItem = mutation({
     availableTo: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    if (currentUser.tenantId !== args.tenantId) {
+      throw new Error("Forbidden: cannot manage menu for another tenant");
+    }
+
     // Get sort order
     const existing = await ctx.db
       .query("menuItems")
@@ -174,8 +185,10 @@ export const deleteItem = mutation({
 export const toggle86 = mutation({
   args: { id: v.id("menuItems") },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
     const item = await ctx.db.get(args.id);
     if (!item) throw new Error("Item not found");
+    assertTenantOwnership(item, currentUser.tenantId);
 
     const newState = !item.is86d;
     await ctx.db.patch(args.id, {
@@ -199,6 +212,11 @@ export const createModifierGroup = mutation({
     menuItemIds: v.array(v.id("menuItems")),
   },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    if (currentUser.tenantId !== args.tenantId) {
+      throw new Error("Forbidden: cannot manage menu for another tenant");
+    }
+
     return await ctx.db.insert("modifierGroups", {
       ...args,
       createdAt: Date.now(),
@@ -217,6 +235,11 @@ export const createModifierOption = mutation({
     sortOrder: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    if (currentUser.tenantId !== args.tenantId) {
+      throw new Error("Forbidden: cannot manage menu for another tenant");
+    }
+
     return await ctx.db.insert("modifierOptions", {
       tenantId: args.tenantId,
       groupId: args.groupId,
@@ -246,6 +269,10 @@ export const updateModifierGroup = mutation({
 export const deleteModifierGroup = mutation({
   args: { id: v.id("modifierGroups") },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    const group = await ctx.db.get(args.id);
+    assertTenantOwnership(group, currentUser.tenantId);
+
     // Delete all options in this group first
     const options = await ctx.db
       .query("modifierOptions")

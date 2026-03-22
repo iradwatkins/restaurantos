@@ -1,5 +1,6 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
+import { requireTenantAccess, assertTenantOwnership } from "../lib/tenant_auth";
 
 export const upsert = mutation({
   args: {
@@ -18,6 +19,11 @@ export const upsert = mutation({
     endTime: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    if (currentUser.tenantId !== args.tenantId) {
+      throw new Error("Forbidden: cannot manage specials for another tenant");
+    }
+
     // Check if one already exists for this day
     const existing = await ctx.db
       .query("dailySpecials")
@@ -50,8 +56,10 @@ export const upsert = mutation({
 export const toggleActive = mutation({
   args: { id: v.id("dailySpecials") },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
     const special = await ctx.db.get(args.id);
     if (!special) throw new Error("Not found");
+    assertTenantOwnership(special, currentUser.tenantId);
     await ctx.db.patch(args.id, { isActive: !special.isActive, updatedAt: Date.now() });
   },
 });
@@ -59,6 +67,9 @@ export const toggleActive = mutation({
 export const deleteSpecial = mutation({
   args: { id: v.id("dailySpecials") },
   handler: async (ctx, args) => {
+    const currentUser = await requireTenantAccess(ctx);
+    const special = await ctx.db.get(args.id);
+    assertTenantOwnership(special, currentUser.tenantId);
     await ctx.db.delete(args.id);
   },
 });

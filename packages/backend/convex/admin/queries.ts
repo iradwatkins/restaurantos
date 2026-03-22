@@ -55,19 +55,41 @@ export const getSystemHealth = query({
     const tenants = await ctx.db.query("tenants").collect();
     const activeTenants = tenants.filter((t) => t.status === "active").length;
 
-    // Count orders this month
+    // Count orders this month using time-bounded indexed queries per tenant
+    // instead of scanning the entire orders table
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-    const allOrders = await ctx.db.query("orders").collect();
-    const monthOrders = allOrders.filter((o) => o.createdAt >= monthStart);
+
+    const activeTenantList = tenants.filter((t) => t.status === "active");
+    const monthOrdersByTenant = await Promise.all(
+      activeTenantList.map((tenant) =>
+        ctx.db
+          .query("orders")
+          .withIndex("by_tenantId_createdAt", (q) =>
+            q.eq("tenantId", tenant._id).gte("createdAt", monthStart)
+          )
+          .collect()
+      )
+    );
+    const monthOrders = monthOrdersByTenant.flat();
     const monthRevenue = monthOrders.reduce((sum, o) => sum + o.total, 0);
 
-    // Webhook health
-    const recentWebhooks = await ctx.db.query("webhookLogs").collect();
-    const last100 = recentWebhooks.slice(-100);
-    const failedCount = last100.filter((w) => w.status === "failed").length;
-    const webhookSuccessRate = last100.length > 0
-      ? Math.round(((last100.length - failedCount) / last100.length) * 100)
+    // Webhook health — use indexed queries per tenant instead of full scan
+    const webhooksByTenant = await Promise.all(
+      activeTenantList.map((tenant) =>
+        ctx.db
+          .query("webhookLogs")
+          .withIndex("by_tenantId", (q) => q.eq("tenantId", tenant._id))
+          .order("desc")
+          .take(100)
+      )
+    );
+    const recentWebhooks = webhooksByTenant.flat()
+      .sort((a, b) => b.receivedAt - a.receivedAt)
+      .slice(0, 100);
+    const failedCount = recentWebhooks.filter((w) => w.status === "failed").length;
+    const webhookSuccessRate = recentWebhooks.length > 0
+      ? Math.round(((recentWebhooks.length - failedCount) / recentWebhooks.length) * 100)
       : 100;
 
     // Plan distribution
@@ -90,17 +112,22 @@ export const getSystemHealth = query({
 export const getTenantAnalytics = query({
   handler: async (ctx) => {
     const tenants = await ctx.db.query("tenants").collect();
-    const allOrders = await ctx.db.query("orders").collect();
 
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
 
-    const analytics = tenants
-      .filter((t) => t.status === "active")
-      .map((tenant) => {
-        const tenantOrders = allOrders.filter(
-          (o) => o.tenantId === tenant._id && o.createdAt >= monthStart
-        );
+    // Query orders per active tenant using time-bounded index
+    // instead of loading entire orders table into memory
+    const activeTenants = tenants.filter((t) => t.status === "active");
+
+    const analytics = await Promise.all(
+      activeTenants.map(async (tenant) => {
+        const tenantOrders = await ctx.db
+          .query("orders")
+          .withIndex("by_tenantId_createdAt", (q) =>
+            q.eq("tenantId", tenant._id).gte("createdAt", monthStart)
+          )
+          .collect();
         const revenue = tenantOrders.reduce((sum, o) => sum + o.total, 0);
 
         return {
@@ -112,9 +139,9 @@ export const getTenantAnalytics = query({
           revenueCents: revenue,
         };
       })
-      .sort((a, b) => b.revenueCents - a.revenueCents);
+    );
 
-    return analytics;
+    return analytics.sort((a, b) => b.revenueCents - a.revenueCents);
   },
 });
 

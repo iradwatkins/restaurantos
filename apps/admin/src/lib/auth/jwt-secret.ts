@@ -1,7 +1,16 @@
-const JWT_SECRET = process.env.JWT_SECRET || process.env.AUTH_SECRET || 'dev-secret-change-me';
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET || process.env.AUTH_SECRET;
+  if (!secret) {
+    throw new Error(
+      'JWT_SECRET or AUTH_SECRET environment variable must be set. ' +
+      'Refusing to start with no secret configured.'
+    );
+  }
+  return secret;
+}
 
 export function getJwtSecretEncoded(): Uint8Array {
-  return new TextEncoder().encode(JWT_SECRET);
+  return new TextEncoder().encode(getJwtSecret());
 }
 
 export function validateJwtSecret(): { valid: boolean; error?: string } {

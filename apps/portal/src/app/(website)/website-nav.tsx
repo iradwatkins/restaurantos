@@ -9,12 +9,14 @@ export function WebsiteNav({
   tenantName,
   logoUrl,
   hasCatering,
+  hasReservations,
   phone,
   primaryColor,
 }: {
   tenantName: string;
   logoUrl?: string;
   hasCatering: boolean;
+  hasReservations?: boolean;
   phone?: string;
   primaryColor?: string;
 }) {
@@ -40,6 +42,7 @@ export function WebsiteNav({
     { href: '/', label: 'Home' },
     { href: '/our-menu', label: 'Menu' },
     { href: '/events', label: 'Events & Specials' },
+    ...(hasReservations ? [{ href: '/book', label: 'Reservations' }] : []),
     { href: '/about', label: 'About' },
     { href: '/contact', label: 'Contact' },
     ...(hasCatering ? [{ href: '/catering', label: 'Catering' }] : []),
@@ -95,8 +98,8 @@ export function WebsiteNav({
               ))}
               <Link
                 href="/order"
-                className="ml-2 inline-flex items-center justify-center rounded-md px-5 py-2 text-sm font-semibold text-white transition-colors"
-                style={{ backgroundColor: ctaColor }}
+                className="ml-2 inline-flex items-center justify-center rounded-md px-5 py-2 text-sm font-semibold transition-colors"
+                style={{ backgroundColor: ctaColor, color: '#ffffff' }}
               >
                 Order Online
               </Link>
@@ -132,8 +135,8 @@ export function WebsiteNav({
               ))}
               <Link
                 href="/order"
-                className="block text-center mt-2 rounded-md px-4 py-2.5 text-sm font-semibold text-white"
-                style={{ backgroundColor: ctaColor }}
+                className="block text-center mt-2 rounded-md px-4 py-2.5 text-sm font-semibold"
+                style={{ backgroundColor: ctaColor, color: '#ffffff' }}
                 onClick={() => setMobileOpen(false)}
               >
                 Order Online

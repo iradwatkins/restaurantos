@@ -12,12 +12,17 @@ import {
 } from '@restaurantos/ui';
 import { LogOut, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
+import { ClockButton } from './clock-button';
 
 const ROUTE_TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/orders': 'Orders',
   '/kds': 'Kitchen Display',
   '/menu': 'Menu',
+  '/inventory': 'Inventory',
+  '/scheduling': 'Scheduling',
+  '/customers': 'Customers',
+  '/marketing': 'Marketing',
   '/reports': 'Reports',
   '/settings': 'Settings',
 };
@@ -48,6 +53,8 @@ export function PortalHeader({ tenant, user }: PortalHeaderProps) {
         <span className="font-medium text-foreground">{pageTitle}</span>
       </div>
 
+      <div className="flex items-center gap-3">
+        <ClockButton />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button className="flex items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-accent">
@@ -75,6 +82,7 @@ export function PortalHeader({ tenant, user }: PortalHeaderProps) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      </div>
     </header>
   );
 }

@@ -15,14 +15,23 @@ export const getByTenant = query({
 export const getActiveOrders = query({
   args: { tenantId: v.id("tenants") },
   handler: async (ctx, args) => {
-    const statuses = ["open", "sent_to_kitchen", "preparing", "ready"];
-    const all = await ctx.db
-      .query("orders")
-      .withIndex("by_tenantId", (q) => q.eq("tenantId", args.tenantId))
-      .order("desc")
-      .collect();
+    // Query each active status via the compound index instead of scanning all orders
+    const activeStatuses = ["open", "sent_to_kitchen", "preparing", "ready"] as const;
 
-    return all.filter((o) => statuses.includes(o.status));
+    const statusQueries = activeStatuses.map((status) =>
+      ctx.db
+        .query("orders")
+        .withIndex("by_tenantId_status", (q) =>
+          q.eq("tenantId", args.tenantId).eq("status", status)
+        )
+        .collect()
+    );
+
+    const results = await Promise.all(statusQueries);
+    const merged = results.flat();
+
+    // Sort by creation time descending (newest first)
+    return merged.sort((a, b) => b.createdAt - a.createdAt);
   },
 });
 
@@ -60,6 +69,29 @@ export const getPayments = query({
     return await ctx.db
       .query("payments")
       .withIndex("by_orderId", (q) => q.eq("orderId", args.orderId))
+      .collect();
+  },
+});
+
+/**
+ * List orders within a date range for a tenant.
+ * Used for accounting sync (daily journal entries).
+ */
+export const listByDateRange = query({
+  args: {
+    tenantId: v.id("tenants"),
+    startDate: v.number(),
+    endDate: v.number(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("orders")
+      .withIndex("by_tenantId_createdAt", (q) =>
+        q
+          .eq("tenantId", args.tenantId)
+          .gte("createdAt", args.startDate)
+          .lte("createdAt", args.endDate)
+      )
       .collect();
   },
 });

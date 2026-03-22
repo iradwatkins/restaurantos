@@ -16,9 +16,11 @@ import {
   CreditCard,
   Printer,
 } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { formatCents } from '@/lib/format';
 import { printReceipt } from '@/lib/print';
+import { CashTender } from '@/components/cash-tender';
 import type { Doc, Id } from '@restaurantos/backend/dataModel';
 
 interface TableSelectPhaseProps {
@@ -50,6 +52,8 @@ export function TableSelectPhase({
   onQuickSendToKitchen,
   onCashPayment,
 }: TableSelectPhaseProps) {
+  const [showCashTender, setShowCashTender] = useState(false);
+
   return (
     <div className="flex h-full flex-col">
       {/* Filter bar */}
@@ -207,46 +211,55 @@ export function TableSelectPhase({
       </div>
 
       {/* Payment Dialog */}
-      <Dialog open={!!payOrder} onOpenChange={() => setPayOrder(null)}>
+      <Dialog open={!!payOrder} onOpenChange={() => { setPayOrder(null); setShowCashTender(false); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Process Payment</DialogTitle>
             <DialogDescription className="sr-only">Process payment for this order</DialogDescription>
           </DialogHeader>
           {payOrder && (
-            <div className="space-y-4">
-              <div className="text-center">
-                <p className="text-3xl font-bold">${formatCents(payOrder.total)}</p>
-                <p className="text-sm text-muted-foreground">Order #{payOrder.orderNumber}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+            showCashTender ? (
+              <CashTender
+                totalCents={payOrder.total}
+                orderNumber={payOrder.orderNumber}
+                onComplete={() => onCashPayment(payOrder)}
+                onBack={() => setShowCashTender(false)}
+              />
+            ) : (
+              <div className="space-y-4">
+                <div className="text-center">
+                  <p className="text-3xl font-bold">${formatCents(payOrder.total)}</p>
+                  <p className="text-sm text-muted-foreground">Order #{payOrder.orderNumber}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Button
+                    className="h-16"
+                    variant="outline"
+                    onClick={() => setShowCashTender(true)}
+                  >
+                    <DollarSign className="mr-2 h-5 w-5" />
+                    Cash
+                  </Button>
+                  <Button
+                    className="h-16"
+                    onClick={() =>
+                      toast.info('Card payments require Stripe Terminal. Configure in Settings.')
+                    }
+                  >
+                    <CreditCard className="mr-2 h-5 w-5" />
+                    Card
+                  </Button>
+                </div>
                 <Button
-                  className="h-16"
                   variant="outline"
-                  onClick={() => onCashPayment(payOrder)}
+                  className="w-full"
+                  onClick={() => printReceipt(payOrder, tenant?.name || 'Restaurant')}
                 >
-                  <DollarSign className="mr-2 h-5 w-5" />
-                  Cash
-                </Button>
-                <Button
-                  className="h-16"
-                  onClick={() =>
-                    toast.info('Card payments require Stripe Terminal. Configure in Settings.')
-                  }
-                >
-                  <CreditCard className="mr-2 h-5 w-5" />
-                  Card
+                  <Printer className="mr-2 h-4 w-4" />
+                  Print Receipt
                 </Button>
               </div>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => printReceipt(payOrder, tenant?.name || 'Restaurant')}
-              >
-                <Printer className="mr-2 h-4 w-4" />
-                Print Receipt
-              </Button>
-            </div>
+            )
           )}
         </DialogContent>
       </Dialog>

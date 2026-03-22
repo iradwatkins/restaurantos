@@ -99,6 +99,20 @@ export default defineSchema({
       })
     ),
 
+    // Tip Pooling
+    tipPoolingEnabled: v.optional(v.boolean()),
+    tipPoolingMethod: v.optional(
+      v.union(v.literal("equal"), v.literal("hours"), v.literal("points"))
+    ),
+
+    // Reservation Settings
+    reservationsEnabled: v.optional(v.boolean()),
+    reservationSlotMinutes: v.optional(v.number()), // 15, 30, or 60 min intervals
+    reservationMaxPartySize: v.optional(v.number()),
+    reservationMaxDaysAhead: v.optional(v.number()), // how far in advance
+    reservationDefaultDuration: v.optional(v.number()), // minutes
+    reservationAutoConfirm: v.optional(v.boolean()), // auto-confirm online reservations
+
     // Features & Plan
     features: v.optional(
       v.object({
@@ -117,6 +131,19 @@ export default defineSchema({
     ),
     stripeCustomerId: v.optional(v.string()),
 
+    // Payment processing (POS terminal)
+    paymentProcessor: v.optional(
+      v.union(v.literal("stripe"), v.literal("square"), v.literal("none"))
+    ), // defaults to "none"
+    stripeAccountId: v.optional(v.string()), // for Stripe Connect
+    stripeTerminalLocationId: v.optional(v.string()), // Stripe Terminal location
+
+    // Square payment processing
+    squareAccessToken: v.optional(v.string()), // Square OAuth access token (encrypted)
+    squareRefreshToken: v.optional(v.string()), // Square OAuth refresh token (encrypted)
+    squareLocationId: v.optional(v.string()), // Square location ID
+    squareMerchantId: v.optional(v.string()), // Square merchant ID
+
     // Website content (configurable per-tenant, with fallback defaults)
     heroHeading: v.optional(v.string()), // e.g. "Soul Food."
     heroSubheading: v.optional(v.string()), // e.g. "Made Fresh Daily."
@@ -125,6 +152,27 @@ export default defineSchema({
       v.array(v.object({ name: v.string(), color: v.string() }))
     ), // e.g. [{name:"DoorDash",color:"#FF3008"}]
     footerTagline: v.optional(v.string()), // e.g. "Fresh food, great service."
+
+    // Own Delivery Settings (for restaurant's own delivery fleet)
+    deliveryEnabled: v.optional(v.boolean()),
+    deliveryFee: v.optional(v.number()), // flat fee in cents
+    deliveryMinimum: v.optional(v.number()), // minimum order total in cents
+    deliveryRadius: v.optional(v.number()), // radius in miles
+    deliveryZones: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          zipCodes: v.array(v.string()),
+          fee: v.number(), // cents
+        })
+      )
+    ),
+
+    // DoorDash Drive Settings (on-demand delivery via DoorDash)
+    doordashDriveEnabled: v.optional(v.boolean()),
+    doordashDeveloperId: v.optional(v.string()),
+    doordashKeyId: v.optional(v.string()),
+    doordashSigningSecret: v.optional(v.string()),
 
     // Website
     websiteEnabled: v.optional(v.boolean()),
@@ -139,6 +187,22 @@ export default defineSchema({
       })
     ),
     googleMapsEmbedUrl: v.optional(v.string()),
+
+    // Accounting Integration
+    accountingProvider: v.optional(
+      v.union(v.literal("quickbooks"), v.literal("xero"), v.literal("none"))
+    ),
+    quickbooksAccessToken: v.optional(v.string()),
+    quickbooksRefreshToken: v.optional(v.string()),
+    quickbooksRealmId: v.optional(v.string()),
+    quickbooksConnectedAt: v.optional(v.number()),
+    xeroAccessToken: v.optional(v.string()),
+    xeroRefreshToken: v.optional(v.string()),
+    xeroTenantId: v.optional(v.string()),
+    xeroConnectedAt: v.optional(v.number()),
+
+    accountingAutoSyncEnabled: v.optional(v.boolean()),
+    accountingLastSyncTime: v.optional(v.number()),
 
     createdAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
@@ -351,6 +415,17 @@ export default defineSchema({
     .index("by_groupId", ["groupId"])
     .index("by_tenantId", ["tenantId"]),
 
+  // ==================== POS: Discounts ====================
+  discounts: defineTable({
+    tenantId: v.id("tenants"),
+    name: v.string(), // e.g., "Happy Hour 20%", "Military Discount", "Employee Meal"
+    type: v.union(v.literal("percentage"), v.literal("fixed")),
+    value: v.number(), // percentage (e.g., 20 for 20%) or cents (e.g., 500 for $5.00)
+    isActive: v.boolean(),
+    requiresApproval: v.boolean(), // whether manager approval is needed to apply
+    createdAt: v.number(),
+  }).index("by_tenantId", ["tenantId"]),
+
   // ==================== POS: Tables / Floor Plan ====================
   tables: defineTable({
     tenantId: v.id("tenants"),
@@ -363,10 +438,21 @@ export default defineSchema({
       v.literal("reserved"),
       v.literal("closing")
     ),
-    // Floor plan position (for visual layout)
+    // Floor plan position & dimensions (for visual layout editor)
     posX: v.optional(v.number()),
     posY: v.optional(v.number()),
-    shape: v.optional(v.union(v.literal("square"), v.literal("round"), v.literal("rectangle"))),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
+    shape: v.optional(
+      v.union(
+        v.literal("circle"),
+        v.literal("square"),
+        v.literal("rectangle"),
+        v.literal("round") // legacy — prefer "circle" going forward
+      )
+    ),
+    rotation: v.optional(v.number()), // degrees 0-360
+    floor: v.optional(v.string()), // multi-floor support: "1st Floor", "Rooftop"
     currentOrderId: v.optional(v.id("orders")),
     createdAt: v.optional(v.number()),
   })
@@ -416,6 +502,10 @@ export default defineSchema({
         ),
         specialInstructions: v.optional(v.string()),
         lineTotal: v.number(), // cents
+        // Void fields
+        isVoided: v.optional(v.boolean()),
+        voidedBy: v.optional(v.string()),
+        voidReason: v.optional(v.string()),
       })
     ),
 
@@ -440,6 +530,47 @@ export default defineSchema({
     ),
     stripePaymentIntentId: v.optional(v.string()),
 
+    // Discount / Comp
+    discountId: v.optional(v.id("discounts")),
+    discountType: v.optional(
+      v.union(v.literal("percentage"), v.literal("fixed"), v.literal("comp"))
+    ),
+    discountValue: v.optional(v.number()), // the value that was applied
+    discountAmount: v.optional(v.number()), // actual dollar amount deducted (in cents)
+    discountReason: v.optional(v.string()), // reason for comp/void
+    isComped: v.optional(v.boolean()), // whether the entire order was comped
+    compedBy: v.optional(v.string()), // who authorized the comp
+
+    // Tip
+    tipAmount: v.optional(v.number()), // tip amount in cents
+    tipMethod: v.optional(v.union(v.literal("cash"), v.literal("card"))),
+
+    // Order type & delivery fields (own delivery)
+    orderType: v.optional(
+      v.union(v.literal("pickup"), v.literal("delivery"), v.literal("dine_in"))
+    ),
+    deliveryAddress: v.optional(
+      v.object({
+        street: v.string(),
+        city: v.string(),
+        state: v.string(),
+        zip: v.string(),
+      })
+    ),
+    deliveryFee: v.optional(v.number()), // cents
+    deliveryInstructions: v.optional(v.string()),
+    deliveryStatus: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("assigned"),
+        v.literal("picked_up"),
+        v.literal("delivered")
+      )
+    ),
+
+    // Offline sync deduplication
+    offlineId: v.optional(v.string()),
+
     // External delivery order reference
     externalOrderId: v.optional(v.string()),
     estimatedPickupTime: v.optional(v.number()),
@@ -459,6 +590,8 @@ export default defineSchema({
     .index("by_tenantId", ["tenantId"])
     .index("by_tenantId_status", ["tenantId", "status"])
     .index("by_tenantId_createdAt", ["tenantId", "createdAt"])
+    .index("by_tenantId_orderNumber", ["tenantId", "orderNumber"])
+    .index("by_tenantId_offlineId", ["tenantId", "offlineId"])
     .index("by_tableId", ["tableId"]),
 
   // ==================== POS: Payments ====================
@@ -786,4 +919,296 @@ export default defineSchema({
   })
     .index("by_tenantId", ["tenantId"])
     .index("by_tenantId_status", ["tenantId", "status"]),
+
+  // ==================== Customers (CRM) ====================
+  customers: defineTable({
+    tenantId: v.id("tenants"),
+    name: v.string(),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    orderCount: v.number(),
+    totalSpent: v.number(), // cents
+    lastOrderDate: v.optional(v.number()), // epoch ms
+    firstOrderDate: v.number(), // epoch ms
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_tenantId", ["tenantId"])
+    .index("by_tenantId_email", ["tenantId", "email"])
+    .index("by_tenantId_phone", ["tenantId", "phone"]),
+
+  // ==================== Inventory: Ingredients ====================
+  ingredients: defineTable({
+    tenantId: v.id("tenants"),
+    name: v.string(),
+    unit: v.string(), // "oz", "lb", "each", "cup", "gal", etc.
+    currentStock: v.number(), // current quantity in the unit
+    lowStockThreshold: v.number(), // trigger alert when below this
+    costPerUnit: v.number(), // cents — purchase cost per unit
+    par: v.optional(v.number()), // target stock level
+    category: v.optional(v.string()), // "Produce", "Protein", "Dairy", etc.
+    supplier: v.optional(v.string()),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_tenantId", ["tenantId"])
+    .index("by_tenantId_category", ["tenantId", "category"]),
+
+  // ==================== Inventory: Menu Item ↔ Ingredient Links ====================
+  menuItemIngredients: defineTable({
+    tenantId: v.id("tenants"),
+    menuItemId: v.id("menuItems"),
+    ingredientId: v.id("ingredients"),
+    quantity: v.number(), // amount of ingredient used per menu item
+  })
+    .index("by_menuItemId", ["menuItemId"])
+    .index("by_ingredientId", ["ingredientId"])
+    .index("by_tenantId", ["tenantId"]),
+
+  // ==================== Inventory: Stock Change Logs ====================
+  inventoryLogs: defineTable({
+    tenantId: v.id("tenants"),
+    ingredientId: v.id("ingredients"),
+    type: v.union(
+      v.literal("order_deduction"),
+      v.literal("receive"),
+      v.literal("waste"),
+      v.literal("adjustment"),
+      v.literal("count")
+    ),
+    quantityChange: v.number(), // positive for additions, negative for deductions
+    previousStock: v.number(),
+    newStock: v.number(),
+    orderId: v.optional(v.id("orders")), // for order deductions
+    reason: v.optional(v.string()),
+    performedBy: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_tenantId_createdAt", ["tenantId", "createdAt"])
+    .index("by_ingredientId_createdAt", ["ingredientId", "createdAt"]),
+
+  // ==================== Reservations ====================
+  reservations: defineTable({
+    tenantId: v.id("tenants"),
+    customerName: v.string(),
+    customerPhone: v.string(),
+    customerEmail: v.optional(v.string()),
+    partySize: v.number(),
+    date: v.string(), // "YYYY-MM-DD"
+    time: v.string(), // "HH:MM" 24hr
+    endTime: v.optional(v.string()), // estimated end "HH:MM"
+    duration: v.number(), // minutes, default 90
+    tableId: v.optional(v.id("tables")), // assigned table
+    status: v.union(
+      v.literal("pending"),
+      v.literal("confirmed"),
+      v.literal("seated"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+      v.literal("no_show")
+    ),
+    source: v.union(
+      v.literal("online"),
+      v.literal("phone"),
+      v.literal("walk_in")
+    ),
+    notes: v.optional(v.string()),
+    specialRequests: v.optional(v.string()),
+    waitlistPosition: v.optional(v.number()), // for waitlist entries
+    createdAt: v.number(),
+  })
+    .index("by_tenantId_date", ["tenantId", "date"])
+    .index("by_tenantId_status", ["tenantId", "status"])
+    .index("by_tenantId_createdAt", ["tenantId", "createdAt"]),
+
+  // ==================== Time Clock: Shifts ====================
+  shifts: defineTable({
+    tenantId: v.id("tenants"),
+    userId: v.id("users"),
+    clockIn: v.number(), // epoch ms
+    clockOut: v.optional(v.number()), // epoch ms
+    breakMinutes: v.optional(v.number()), // total break time in minutes
+    role: v.string(), // role during this shift
+    hourlyRate: v.optional(v.number()), // cents — wage rate
+    notes: v.optional(v.string()),
+    isActive: v.boolean(), // true while clocked in
+    createdAt: v.number(),
+  })
+    .index("by_tenantId", ["tenantId"])
+    .index("by_tenantId_userId", ["tenantId", "userId"])
+    .index("by_tenantId_createdAt", ["tenantId", "createdAt"]),
+
+  // ==================== Scheduling: Planned Shifts ====================
+  schedules: defineTable({
+    tenantId: v.id("tenants"),
+    userId: v.id("users"),
+    date: v.string(), // "YYYY-MM-DD"
+    startTime: v.string(), // "HH:MM" 24hr
+    endTime: v.string(), // "HH:MM" 24hr
+    role: v.string(),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_tenantId_date", ["tenantId", "date"])
+    .index("by_tenantId_userId", ["tenantId", "userId"]),
+
+  // ==================== Accounting Sync Logs ====================
+  accountingSyncLogs: defineTable({
+    tenantId: v.id("tenants"),
+    syncType: v.union(v.literal("manual"), v.literal("auto")),
+    status: v.union(v.literal("success"), v.literal("error")),
+    recordsSynced: v.optional(v.number()),
+    errorMessage: v.optional(v.string()),
+    timestamp: v.number(),
+  })
+    .index("by_tenantId", ["tenantId"])
+    .index("by_tenantId_timestamp", ["tenantId", "timestamp"]),
+
+  // ==================== Loyalty Programs ====================
+  loyaltyPrograms: defineTable({
+    tenantId: v.id("tenants"),
+    name: v.string(),
+    pointsPerDollar: v.number(), // points earned per $1 spent
+    redemptionRules: v.array(
+      v.object({
+        pointsRequired: v.number(),
+        rewardType: v.union(
+          v.literal("discount_percentage"),
+          v.literal("discount_fixed"),
+          v.literal("free_item")
+        ),
+        rewardValue: v.number(),
+        description: v.string(),
+      })
+    ),
+    tiers: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          minPoints: v.number(),
+          multiplier: v.number(), // e.g., Gold = 2x points
+        })
+      )
+    ),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+  }).index("by_tenantId", ["tenantId"]),
+
+  // ==================== Loyalty Accounts ====================
+  loyaltyAccounts: defineTable({
+    tenantId: v.id("tenants"),
+    customerId: v.id("customers"),
+    programId: v.id("loyaltyPrograms"),
+    currentPoints: v.number(),
+    lifetimePoints: v.number(),
+    currentTier: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_tenantId", ["tenantId"])
+    .index("by_customerId", ["customerId"])
+    .index("by_tenantId_customerId", ["tenantId", "customerId"]),
+
+  // ==================== Loyalty Transactions ====================
+  loyaltyTransactions: defineTable({
+    tenantId: v.id("tenants"),
+    accountId: v.id("loyaltyAccounts"),
+    orderId: v.optional(v.id("orders")),
+    type: v.union(
+      v.literal("earn"),
+      v.literal("redeem"),
+      v.literal("adjust"),
+      v.literal("expire")
+    ),
+    points: v.number(), // positive for earn, negative for redeem
+    description: v.string(),
+    createdAt: v.number(),
+  }).index("by_accountId_createdAt", ["accountId", "createdAt"]),
+
+  // ==================== Marketing: Campaigns ====================
+  campaigns: defineTable({
+    tenantId: v.id("tenants"),
+    name: v.string(),
+    subject: v.string(),
+    body: v.string(), // HTML string
+    segmentFilter: v.string(), // segment name to target
+    status: v.union(
+      v.literal("draft"),
+      v.literal("scheduled"),
+      v.literal("sending"),
+      v.literal("sent"),
+      v.literal("cancelled")
+    ),
+    scheduledAt: v.optional(v.number()), // epoch ms
+    sentAt: v.optional(v.number()), // epoch ms
+    recipientCount: v.number(),
+    openCount: v.number(),
+    clickCount: v.number(),
+    createdAt: v.number(),
+  }).index("by_tenantId_createdAt", ["tenantId", "createdAt"]),
+
+  // ==================== Marketing: Campaign Recipients ====================
+  campaignRecipients: defineTable({
+    tenantId: v.id("tenants"),
+    campaignId: v.id("campaigns"),
+    customerId: v.id("customers"),
+    email: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("sent"),
+      v.literal("delivered"),
+      v.literal("opened"),
+      v.literal("clicked"),
+      v.literal("bounced")
+    ),
+    sentAt: v.optional(v.number()), // epoch ms
+    openedAt: v.optional(v.number()), // epoch ms
+  }).index("by_campaignId", ["campaignId"]),
+
+  // ==================== Marketing: Automated Triggers ====================
+  automatedTriggers: defineTable({
+    tenantId: v.id("tenants"),
+    type: v.union(
+      v.literal("birthday"),
+      v.literal("inactive_30d"),
+      v.literal("inactive_60d"),
+      v.literal("anniversary"),
+      v.literal("first_order_followup")
+    ),
+    templateSubject: v.string(),
+    templateBody: v.string(), // HTML string
+    isActive: v.boolean(),
+    lastRunAt: v.optional(v.number()), // epoch ms
+    createdAt: v.number(),
+  }).index("by_tenantId", ["tenantId"]),
+
+  // ==================== Deliveries (Third-Party Delivery Tracking) ====================
+  deliveries: defineTable({
+    tenantId: v.id("tenants"),
+    orderId: v.id("orders"),
+    provider: v.union(
+      v.literal("doordash"),
+      v.literal("ubereats"),
+      v.literal("grubhub"),
+      v.literal("own")
+    ),
+    externalId: v.string(), // provider's delivery ID
+    status: v.union(
+      v.literal("pending"),
+      v.literal("assigned"),
+      v.literal("picked_up"),
+      v.literal("delivered"),
+      v.literal("cancelled")
+    ),
+    driverName: v.optional(v.string()),
+    driverPhone: v.optional(v.string()),
+    trackingUrl: v.optional(v.string()),
+    fee: v.optional(v.number()), // cents
+    estimatedPickup: v.optional(v.number()), // epoch ms
+    estimatedDropoff: v.optional(v.number()), // epoch ms
+    createdAt: v.number(),
+  })
+    .index("by_tenantId", ["tenantId"])
+    .index("by_tenantId_status", ["tenantId", "status"])
+    .index("by_orderId", ["orderId"])
+    .index("by_externalId", ["externalId"]),
 });

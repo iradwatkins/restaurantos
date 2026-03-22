@@ -1,5 +1,6 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
+import { requireTenantAccess, assertTenantOwnership } from "../lib/tenant_auth";
 
 export const createEvent = mutation({
   args: {
@@ -18,6 +19,11 @@ export const createEvent = mutation({
     endTime: v.string(),
   },
   handler: async (ctx, args) => {
+    const user = await requireTenantAccess(ctx);
+    if (user.tenantId !== args.tenantId) {
+      throw new Error("Forbidden");
+    }
+
     return await ctx.db.insert("events", {
       ...args,
       isActive: true,
@@ -42,6 +48,10 @@ export const updateEvent = mutation({
     isActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    const user = await requireTenantAccess(ctx);
+    const event = await ctx.db.get(args.id);
+    assertTenantOwnership(event, user.tenantId);
+
     const { id, ...updates } = args;
     await ctx.db.patch(id, { ...updates, updatedAt: Date.now() });
   },
@@ -50,6 +60,10 @@ export const updateEvent = mutation({
 export const deleteEvent = mutation({
   args: { id: v.id("events") },
   handler: async (ctx, args) => {
+    const user = await requireTenantAccess(ctx);
+    const event = await ctx.db.get(args.id);
+    assertTenantOwnership(event, user.tenantId);
+
     // Delete pricing tiers first
     const tiers = await ctx.db
       .query("eventPricingTiers")
@@ -71,6 +85,14 @@ export const createPricingTier = mutation({
     sortOrder: v.number(),
   },
   handler: async (ctx, args) => {
+    const user = await requireTenantAccess(ctx);
+    if (user.tenantId !== args.tenantId) {
+      throw new Error("Forbidden");
+    }
+    // Also verify the event belongs to this tenant
+    const event = await ctx.db.get(args.eventId);
+    assertTenantOwnership(event, user.tenantId);
+
     return await ctx.db.insert("eventPricingTiers", args);
   },
 });
@@ -82,6 +104,10 @@ export const updatePricingTier = mutation({
     price: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const user = await requireTenantAccess(ctx);
+    const tier = await ctx.db.get(args.id);
+    assertTenantOwnership(tier, user.tenantId);
+
     const { id, ...updates } = args;
     await ctx.db.patch(id, updates);
   },
@@ -90,6 +116,10 @@ export const updatePricingTier = mutation({
 export const deletePricingTier = mutation({
   args: { id: v.id("eventPricingTiers") },
   handler: async (ctx, args) => {
+    const user = await requireTenantAccess(ctx);
+    const tier = await ctx.db.get(args.id);
+    assertTenantOwnership(tier, user.tenantId);
+
     await ctx.db.delete(args.id);
   },
 });

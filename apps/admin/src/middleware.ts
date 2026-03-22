@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { jwtVerify } from 'jose';
+import { getJwtSecretEncoded } from './lib/auth/jwt-secret';
 
 const PUBLIC_PATHS = ['/login', '/api/auth/login', '/.well-known'];
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (PUBLIC_PATHS.some((path) => pathname.startsWith(path))) {
@@ -15,6 +17,19 @@ export function middleware(request: NextRequest) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // Verify the JWT signature — reject forged or expired tokens
+  try {
+    const secret = getJwtSecretEncoded();
+    await jwtVerify(sessionCookie.value, secret);
+  } catch {
+    // Token is invalid, expired, or tampered — clear the cookie and redirect to login
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    const response = NextResponse.redirect(loginUrl);
+    response.cookies.delete('admin_session_token');
+    return response;
   }
 
   return NextResponse.next();

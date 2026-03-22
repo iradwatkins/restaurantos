@@ -262,22 +262,20 @@ export const getOrderStatus = query({
     customerPhone: v.string(),
   },
   handler: async (ctx, args) => {
-    // Find order by tenant + order number
-    const orders = await ctx.db
+    // Use compound index for direct lookup instead of full-table scan + JS filter
+    const order = await ctx.db
       .query("orders")
-      .withIndex("by_tenantId", (q) => q.eq("tenantId", args.tenantId))
-      .collect();
+      .withIndex("by_tenantId_orderNumber", (q) =>
+        q.eq("tenantId", args.tenantId).eq("orderNumber", args.orderNumber)
+      )
+      .first();
 
-    // First check if order exists by number, then verify phone
-    const orderByNumber = orders.find((o) => o.orderNumber === args.orderNumber);
-    if (!orderByNumber) {
+    if (!order) {
       return { error: "order_not_found" as const };
     }
-    if (orderByNumber.customerPhone !== args.customerPhone) {
+    if (order.customerPhone !== args.customerPhone) {
       return { error: "phone_mismatch" as const };
     }
-
-    const order = orderByNumber;
 
     return {
       _id: order._id,
@@ -380,5 +378,67 @@ export const getModifiersForItem = query({
     );
 
     return result;
+  },
+});
+
+// ==================== Delivery Settings (Public) ====================
+
+export const getDeliverySettings = query({
+  args: { tenantId: v.id("tenants") },
+  handler: async (ctx, args) => {
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant || tenant.status !== "active") return null;
+
+    return {
+      deliveryEnabled: tenant.deliveryEnabled ?? false,
+      deliveryFee: tenant.deliveryFee ?? 0,
+      deliveryMinimum: tenant.deliveryMinimum ?? 0,
+      deliveryRadius: tenant.deliveryRadius ?? 0,
+      deliveryZones: tenant.deliveryZones ?? [],
+    };
+  },
+});
+
+export const validateDeliveryZip = query({
+  args: {
+    tenantId: v.id("tenants"),
+    zipCode: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant || tenant.status !== "active") {
+      return { valid: false as const, error: "Restaurant not found" };
+    }
+
+    if (!tenant.deliveryEnabled) {
+      return { valid: false as const, error: "Delivery is not available" };
+    }
+
+    const zones = tenant.deliveryZones ?? [];
+    if (zones.length === 0) {
+      // No zones configured — use flat fee if delivery is enabled
+      return {
+        valid: true as const,
+        fee: tenant.deliveryFee ?? 0,
+        zoneName: "Standard Delivery",
+      };
+    }
+
+    const matchedZone = zones.find((zone) =>
+      zone.zipCodes.includes(args.zipCode)
+    );
+
+    if (!matchedZone) {
+      return {
+        valid: false as const,
+        error: "Sorry, we don't deliver to this zip code",
+      };
+    }
+
+    return {
+      valid: true as const,
+      fee: matchedZone.fee,
+      zoneName: matchedZone.name,
+    };
   },
 });

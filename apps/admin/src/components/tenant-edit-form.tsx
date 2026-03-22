@@ -11,7 +11,6 @@ import {
   CardDescription,
   Input,
   Label,
-  Badge,
   Separator,
 } from '@restaurantos/ui';
 import { Save, Ban, CheckCircle } from 'lucide-react';

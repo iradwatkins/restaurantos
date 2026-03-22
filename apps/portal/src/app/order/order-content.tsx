@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@restaurantos/backend';
 import { useTenant } from '@/hooks/use-tenant';
@@ -20,7 +20,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@restaurantos/ui';
-import { ShoppingCart, Plus, Minus, Check, Star, Clock, Wine } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Check, Star, Clock, Wine, MapPin, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
@@ -39,6 +39,22 @@ interface CartItem {
   lineTotal: number;
 }
 
+type OrderType = 'pickup' | 'delivery';
+
+interface DeliveryAddress {
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+}
+
+interface DeliveryValidation {
+  valid: boolean;
+  fee?: number;
+  zoneName?: string;
+  error?: string;
+}
+
 export default function OnlineOrderPage() {
   const { tenant, tenantId } = useTenant();
 
@@ -49,44 +65,75 @@ export default function OnlineOrderPage() {
     tenantId ? { tenantId } : 'skip'
   );
 
+  const deliverySettings = useQuery(
+    api.public.queries.getDeliverySettings,
+    tenantId ? { tenantId } : 'skip'
+  );
+
   const placeOrder = useMutation(api.public.mutations.placeOrder);
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showCheckout, setShowCheckout] = useState(false);
+  const [orderType, setOrderType] = useState<OrderType>('pickup');
+  const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddress>({
+    street: '',
+    city: '',
+    state: '',
+    zip: '',
+  });
+  const [deliveryInstructions, setDeliveryInstructions] = useState('');
+  const [deliveryValidation, setDeliveryValidation] = useState<DeliveryValidation | null>(null);
+  const [validatingZip, setValidatingZip] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState<{
     orderNumber: number;
     orderId: string;
     estimatedReadyAt?: number;
+    orderType: OrderType;
+    deliveryAddress?: DeliveryAddress;
+    deliveryFee?: number;
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [showModifierDialog, setShowModifierDialog] = useState<{
-    _id: string;
-    name: string;
-    price: number;
-    description?: string;
-  } | null>(null);
-  const [selectedModifiers, setSelectedModifiers] = useState<Record<string, string[]>>({});
   const [scheduledTime, setScheduledTime] = useState<string>('');
   const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
+  const [, setPaymentIntentId] = useState<string | null>(null);
+
+  // Validate delivery zip code when it changes
+  const zipValidationQuery = useQuery(
+    api.public.queries.validateDeliveryZip,
+    tenantId && orderType === 'delivery' && deliveryAddress.zip.length === 5
+      ? { tenantId, zipCode: deliveryAddress.zip }
+      : 'skip'
+  );
+
+  useEffect(() => {
+    if (zipValidationQuery !== undefined && deliveryAddress.zip.length === 5) {
+      setDeliveryValidation(zipValidationQuery as DeliveryValidation);
+      setValidatingZip(false);
+    }
+  }, [zipValidationQuery, deliveryAddress.zip]);
 
   if (!tenantId || !menuData) {
     return (
-      <div className="text-center py-20 text-muted-foreground">Loading menu...</div>
+      <div role="status" aria-live="polite" className="text-center py-20 text-muted-foreground">Loading menu...</div>
     );
   }
 
   const menu = menuData.categories;
   const hasAlcoholItems = menuData.hasAlcoholItems;
+  const deliveryAvailable = deliverySettings?.deliveryEnabled ?? false;
 
   const onlineSettings = tenant?.onlineOrderingSettings;
   const pickupSlot = onlineSettings?.pickupTimeSlotMinutes ?? 15;
+
+  // Delivery fee from validation result
+  const deliveryFee = orderType === 'delivery' && deliveryValidation?.valid
+    ? (deliveryValidation.fee ?? 0)
+    : 0;
 
   function generateTimeSlots(): string[] {
     const slots: string[] = [];
     const now = new Date();
     const prepMin = onlineSettings?.defaultPrepTimeMinutes ?? 20;
-    // Round up to next slot
     const startMin = now.getHours() * 60 + now.getMinutes() + prepMin;
     const firstSlot = Math.ceil(startMin / pickupSlot) * pickupSlot;
 
@@ -97,7 +144,7 @@ export default function OnlineOrderPage() {
       const displayH = h > 12 ? h - 12 : h === 0 ? 12 : h;
       slots.push(`${displayH}:${min.toString().padStart(2, '0')} ${period}`);
     }
-    return slots.slice(0, 20); // Cap at 20 slots
+    return slots.slice(0, 20);
   }
 
   function addToCart(item: any) {
@@ -164,14 +211,23 @@ export default function OnlineOrderPage() {
     );
   }
 
+  function handleZipChange(value: string) {
+    const cleaned = value.replace(/\D/g, '').slice(0, 5);
+    setDeliveryAddress((prev) => ({ ...prev, zip: cleaned }));
+    if (cleaned.length < 5) {
+      setDeliveryValidation(null);
+    } else {
+      setValidatingZip(true);
+    }
+  }
+
   const subtotal = cart.reduce((sum, item) => sum + item.lineTotal, 0);
   const tax = Math.round(subtotal * TAX_RATE);
-  const total = subtotal + tax;
+  const total = subtotal + tax + deliveryFee;
   const taxDisplay = `${(TAX_RATE * 100).toFixed(2)}%`;
 
   async function initiatePayment() {
     if (!stripePromise) {
-      // No Stripe configured — proceed without payment
       await submitOrder(undefined);
       return;
     }
@@ -204,7 +260,6 @@ export default function OnlineOrderPage() {
   async function submitOrder(stripePaymentIntentId: string | undefined) {
     setSubmitting(true);
 
-    // Validate required fields
     const customerName = (document.getElementById('name') as HTMLInputElement)?.value?.trim();
     const customerPhone = (document.getElementById('phone') as HTMLInputElement)?.value?.trim();
 
@@ -229,19 +284,59 @@ export default function OnlineOrderPage() {
       return;
     }
 
+    // Validate delivery address if delivery order
+    if (orderType === 'delivery') {
+      if (!deliveryAddress.street.trim()) {
+        toast.error('Please enter a delivery street address');
+        setSubmitting(false);
+        return;
+      }
+      if (!deliveryAddress.city.trim()) {
+        toast.error('Please enter a city');
+        setSubmitting(false);
+        return;
+      }
+      if (!deliveryAddress.state.trim()) {
+        toast.error('Please enter a state');
+        setSubmitting(false);
+        return;
+      }
+      if (deliveryAddress.zip.length !== 5) {
+        toast.error('Please enter a valid 5-digit zip code');
+        setSubmitting(false);
+        return;
+      }
+      if (!deliveryValidation?.valid) {
+        toast.error(deliveryValidation?.error || 'Delivery address is not in our delivery area');
+        setSubmitting(false);
+        return;
+      }
+      // Check delivery minimum
+      const delMinimum = deliverySettings?.deliveryMinimum ?? 0;
+      if (delMinimum > 0 && subtotal < delMinimum) {
+        toast.error(`Minimum order for delivery is $${(delMinimum / 100).toFixed(2)}`);
+        setSubmitting(false);
+        return;
+      }
+    }
+
     // Parse scheduled time
     let scheduledPickupTime: number | undefined;
     if (scheduledTime) {
       const today = new Date();
-      const [timePart, period] = scheduledTime.split(' ');
-      let [h, m] = timePart.split(':').map(Number);
+      const parts = scheduledTime.split(' ');
+      const timePart = parts[0] ?? '0:0';
+      const period = parts[1];
+      const timeParts = timePart.split(':').map(Number);
+      let h = timeParts[0] ?? 0;
+      const m = timeParts[1] ?? 0;
       if (period === 'PM' && h !== 12) h += 12;
       if (period === 'AM' && h === 12) h = 0;
       today.setHours(h, m, 0, 0);
       scheduledPickupTime = today.getTime();
 
       if (scheduledPickupTime < Date.now()) {
-        toast.error('Scheduled pickup time must be in the future');
+        toast.error('Scheduled time must be in the future');
         setSubmitting(false);
         return;
       }
@@ -249,12 +344,16 @@ export default function OnlineOrderPage() {
 
     try {
       const result = await placeOrder({
-        tenantId,
+        tenantId: tenantId!,
         customerName,
         customerPhone,
         customerEmail:
           (document.getElementById('email') as HTMLInputElement)?.value?.trim() || undefined,
-        orderType: 'pickup',
+        orderType,
+        deliveryAddress: orderType === 'delivery' ? deliveryAddress : undefined,
+        deliveryInstructions: orderType === 'delivery' && deliveryInstructions.trim()
+          ? deliveryInstructions.trim()
+          : undefined,
         specialInstructions:
           (document.getElementById('notes') as HTMLInputElement).value || undefined,
         scheduledPickupTime,
@@ -269,6 +368,9 @@ export default function OnlineOrderPage() {
         orderNumber: result.orderNumber,
         orderId: result.orderId as string,
         estimatedReadyAt: result.estimatedReadyAt,
+        orderType,
+        deliveryAddress: orderType === 'delivery' ? { ...deliveryAddress } : undefined,
+        deliveryFee: orderType === 'delivery' ? deliveryFee : undefined,
       });
       setCart([]);
       setClientSecret(null);
@@ -295,12 +397,32 @@ export default function OnlineOrderPage() {
         {orderPlaced.estimatedReadyAt && (
           <p className="text-lg mb-2">
             <Clock className="inline h-4 w-4 mr-1" />
-            Estimated ready: {new Date(orderPlaced.estimatedReadyAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            Estimated {orderPlaced.orderType === 'delivery' ? 'delivery' : 'ready'}:{' '}
+            {new Date(orderPlaced.estimatedReadyAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </p>
         )}
-        <p className="text-muted-foreground mb-6">
-          Your order has been sent to the kitchen.
+        <p className="text-muted-foreground mb-2">
+          {orderPlaced.orderType === 'delivery'
+            ? 'Your order has been sent to the kitchen and will be delivered.'
+            : 'Your order has been sent to the kitchen.'}
         </p>
+        {orderPlaced.orderType === 'delivery' && orderPlaced.deliveryAddress && (
+          <div className="bg-muted rounded-lg p-4 text-left text-sm mb-4">
+            <p className="font-medium flex items-center gap-1.5 mb-1">
+              <MapPin className="h-3.5 w-3.5" /> Delivery Address
+            </p>
+            <p>{orderPlaced.deliveryAddress.street}</p>
+            <p>
+              {orderPlaced.deliveryAddress.city}, {orderPlaced.deliveryAddress.state}{' '}
+              {orderPlaced.deliveryAddress.zip}
+            </p>
+            {orderPlaced.deliveryFee !== undefined && orderPlaced.deliveryFee > 0 && (
+              <p className="mt-2 text-muted-foreground">
+                Delivery fee: ${(orderPlaced.deliveryFee / 100).toFixed(2)}
+              </p>
+            )}
+          </div>
+        )}
         <div className="flex gap-3 justify-center">
           <Button
             variant="outline"
@@ -327,6 +449,129 @@ export default function OnlineOrderPage() {
     <div className="grid gap-6 lg:grid-cols-3">
       {/* Menu */}
       <div className="lg:col-span-2 space-y-6">
+        {/* Order Type Selector */}
+        {deliveryAvailable && (
+          <div className="flex gap-2 p-1 bg-muted rounded-lg w-fit">
+            <button
+              onClick={() => {
+                setOrderType('pickup');
+                setDeliveryValidation(null);
+              }}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                orderType === 'pickup'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Pickup
+            </button>
+            <button
+              onClick={() => setOrderType('delivery')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                orderType === 'delivery'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Truck className="h-4 w-4" />
+              Delivery
+            </button>
+          </div>
+        )}
+
+        {/* Delivery Address Form */}
+        {orderType === 'delivery' && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Delivery Address
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="del-street">Street Address</Label>
+                <Input
+                  id="del-street"
+                  value={deliveryAddress.street}
+                  onChange={(e) => setDeliveryAddress((prev) => ({ ...prev, street: e.target.value }))}
+                  placeholder="123 Main St"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="del-city">City</Label>
+                  <Input
+                    id="del-city"
+                    value={deliveryAddress.city}
+                    onChange={(e) => setDeliveryAddress((prev) => ({ ...prev, city: e.target.value }))}
+                    placeholder="Chicago"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="del-state">State</Label>
+                  <Input
+                    id="del-state"
+                    value={deliveryAddress.state}
+                    onChange={(e) => setDeliveryAddress((prev) => ({ ...prev, state: e.target.value.toUpperCase().slice(0, 2) }))}
+                    placeholder="IL"
+                    maxLength={2}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="del-zip">Zip Code</Label>
+                  <Input
+                    id="del-zip"
+                    value={deliveryAddress.zip}
+                    onChange={(e) => handleZipChange(e.target.value)}
+                    placeholder="60601"
+                    maxLength={5}
+                  />
+                </div>
+              </div>
+
+              {/* Zip validation feedback */}
+              {validatingZip && deliveryAddress.zip.length === 5 && (
+                <p className="text-sm text-muted-foreground">Checking delivery area...</p>
+              )}
+              {deliveryValidation && !validatingZip && deliveryAddress.zip.length === 5 && (
+                deliveryValidation.valid ? (
+                  <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+                    <Check className="h-4 w-4 flex-shrink-0" />
+                    <span>
+                      {deliveryValidation.zoneName}
+                      {deliveryValidation.fee !== undefined && deliveryValidation.fee > 0
+                        ? ` — $${(deliveryValidation.fee / 100).toFixed(2)} delivery fee`
+                        : ' — Free delivery'}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                    {deliveryValidation.error}
+                  </div>
+                )
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="del-instructions">Delivery Instructions (optional)</Label>
+                <Input
+                  id="del-instructions"
+                  value={deliveryInstructions}
+                  onChange={(e) => setDeliveryInstructions(e.target.value)}
+                  placeholder="Gate code, apartment number, etc."
+                />
+              </div>
+
+              {deliverySettings && deliverySettings.deliveryMinimum > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Minimum order for delivery: ${(deliverySettings.deliveryMinimum / 100).toFixed(2)}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {hasAlcoholItems && (
           <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-sm px-4 py-3 rounded-lg">
             <Wine className="h-4 w-4 flex-shrink-0" />
@@ -363,12 +608,18 @@ export default function OnlineOrderPage() {
       </div>
 
       {/* Cart Sidebar */}
-      <div className="lg:sticky lg:top-6 space-y-4">
+      <div className="lg:sticky lg:top-6 space-y-4" aria-live="polite">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
-              <ShoppingCart className="h-4 w-4" />
+              <ShoppingCart aria-hidden="true" className="h-4 w-4" />
               Your Order
+              {orderType === 'delivery' && (
+                <Badge variant="secondary" className="text-xs">
+                  <Truck className="h-3 w-3 mr-1" />
+                  Delivery
+                </Badge>
+              )}
               {cart.length > 0 && (
                 <Badge variant="default" className="ml-auto">
                   {cart.reduce((sum, i) => sum + i.quantity, 0)}
@@ -427,6 +678,18 @@ export default function OnlineOrderPage() {
                     <span>Tax ({taxDisplay})</span>
                     <span>${(tax / 100).toFixed(2)}</span>
                   </div>
+                  {orderType === 'delivery' && deliveryFee > 0 && (
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Delivery Fee</span>
+                      <span>${(deliveryFee / 100).toFixed(2)}</span>
+                    </div>
+                  )}
+                  {orderType === 'delivery' && deliveryFee === 0 && deliveryValidation?.valid && (
+                    <div className="flex justify-between text-green-600">
+                      <span>Delivery Fee</span>
+                      <span>Free</span>
+                    </div>
+                  )}
                   <div className="flex justify-between font-bold text-base pt-1">
                     <span>Total</span>
                     <span>${(total / 100).toFixed(2)}</span>
@@ -434,7 +697,14 @@ export default function OnlineOrderPage() {
                 </div>
 
                 {!showCheckout ? (
-                  <Button className="w-full" onClick={() => setShowCheckout(true)}>
+                  <Button
+                    className="w-full"
+                    onClick={() => setShowCheckout(true)}
+                    disabled={
+                      orderType === 'delivery' &&
+                      (!deliveryValidation?.valid || !deliveryAddress.street.trim())
+                    }
+                  >
                     Checkout — ${(total / 100).toFixed(2)}
                   </Button>
                 ) : clientSecret && stripePromise ? (
@@ -446,7 +716,17 @@ export default function OnlineOrderPage() {
                     />
                   </Elements>
                 ) : (
-                  <div className="space-y-3 pt-2">
+                  <form
+                    className="space-y-3 pt-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (stripePromise) {
+                        initiatePayment();
+                      } else {
+                        submitOrder(undefined);
+                      }
+                    }}
+                  >
                     <Separator />
                     <div className="space-y-2">
                       <Label htmlFor="name">Name</Label>
@@ -472,11 +752,11 @@ export default function OnlineOrderPage() {
                       />
                     </div>
 
-                    {/* Scheduled pickup time */}
+                    {/* Scheduled time */}
                     <div className="space-y-2">
                       <Label htmlFor="scheduledTime">
-                        <Clock className="inline h-3 w-3 mr-1" />
-                        Pickup Time
+                        <Clock aria-hidden="true" className="inline h-3 w-3 mr-1" />
+                        {orderType === 'delivery' ? 'Delivery Time' : 'Pickup Time'}
                       </Label>
                       <select
                         id="scheduledTime"
@@ -504,8 +784,8 @@ export default function OnlineOrderPage() {
 
                     {stripePromise ? (
                       <Button
+                        type="submit"
                         className="w-full"
-                        onClick={initiatePayment}
                         disabled={submitting}
                       >
                         {submitting
@@ -514,8 +794,8 @@ export default function OnlineOrderPage() {
                       </Button>
                     ) : (
                       <Button
+                        type="submit"
                         className="w-full"
-                        onClick={() => submitOrder(undefined)}
                         disabled={submitting}
                       >
                         {submitting
@@ -523,7 +803,7 @@ export default function OnlineOrderPage() {
                           : `Place Order — $${(total / 100).toFixed(2)}`}
                       </Button>
                     )}
-                  </div>
+                  </form>
                 )}
               </>
             )}
@@ -566,7 +846,6 @@ function MenuItemCard({
   }
 
   function handleConfirmModifiers() {
-    // Validate required groups
     for (const group of modifierGroups!) {
       const selected = selections[group._id] ?? [];
       if (selected.length < group.minSelections) {
@@ -575,7 +854,6 @@ function MenuItemCard({
       }
     }
 
-    // Build modifier list
     const mods: { name: string; priceAdjustment: number }[] = [];
     for (const group of modifierGroups!) {
       const selected = selections[group._id] ?? [];
@@ -673,6 +951,7 @@ function MenuItemCard({
                       return (
                         <button
                           key={opt._id}
+                          aria-pressed={isSelected}
                           onClick={() =>
                             toggleOption(group._id, opt._id, group.maxSelections)
                           }
@@ -744,7 +1023,7 @@ function StripeCheckoutForm({
     const { error, paymentIntent } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        return_url: window.location.href, // fallback
+        return_url: window.location.href,
       },
       redirect: 'if_required',
     });
@@ -769,23 +1048,5 @@ function StripeCheckoutForm({
         {processing ? 'Processing...' : `Pay $${(total / 100).toFixed(2)}`}
       </Button>
     </form>
-  );
-}
-
-// ==================== Item Image ====================
-
-function OrderItemImage({ storageId, name }: { storageId: any; name: string }) {
-  const imageUrl = useQuery(api.menu.queries.getImageUrl, { storageId });
-
-  if (!imageUrl) {
-    return <div className="h-32 bg-muted" />;
-  }
-
-  return (
-    <img
-      src={imageUrl}
-      alt={name}
-      className="h-32 w-full object-cover"
-    />
   );
 }

@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { jwtVerify } from 'jose';
+import { getJwtSecretEncoded } from './lib/auth/jwt-secret';
 
 // Exact public paths or path prefixes (with trailing slash to avoid /orders matching /order)
-const PUBLIC_PATH_PREFIXES = ['/login', '/api/auth/login', '/.well-known', '/api/webhooks', '/api/stripe'];
+const PUBLIC_PATH_PREFIXES = ['/login', '/api/auth/login', '/.well-known', '/api/webhooks', '/api/stripe', '/api/square/callback'];
 const PUBLIC_PATH_EXACT = ['/order'];
 const PUBLIC_PATH_STARTS = ['/order/']; // matches /order/track etc.
 
@@ -16,7 +18,7 @@ function isPublicPath(pathname: string): boolean {
   return false;
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hostname = request.headers.get('host') || '';
 
@@ -57,11 +59,31 @@ export function middleware(request: NextRequest) {
   }
 
   // Dashboard routes require auth
+  const isApiRoute = pathname.startsWith('/api/');
   const sessionCookie = request.cookies.get(`${subdomain}_session_token`);
   if (!sessionCookie?.value) {
+    if (isApiRoute) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // Verify the JWT signature — reject forged or expired tokens
+  try {
+    const secret = getJwtSecretEncoded();
+    await jwtVerify(sessionCookie.value, secret);
+  } catch {
+    if (isApiRoute) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    // Token is invalid, expired, or tampered — clear the cookie and redirect to login
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    const redirectResponse = NextResponse.redirect(loginUrl);
+    redirectResponse.cookies.delete(`${subdomain}_session_token`);
+    return redirectResponse;
   }
 
   return response;

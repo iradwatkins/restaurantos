@@ -1,6 +1,6 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
-import { validateSplitTotal } from "../lib/split-utils";
+import { validateSplitTotal } from "../lib/split_utils";
 
 export const splitPayment = mutation({
   args: {

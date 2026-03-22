@@ -8,33 +8,60 @@ import Link from 'next/link';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-export default function HomeContent() {
-  const { tenant, tenantId } = useTenant();
+/** Darken a hex color by a factor (0-1). Used to ensure WCAG AA contrast for text. */
+function darkenColor(hex: string, factor: number): string {
+  const c = hex.replace('#', '');
+  const r = Math.round(parseInt(c.substring(0, 2), 16) * (1 - factor));
+  const g = Math.round(parseInt(c.substring(2, 4), 16) * (1 - factor));
+  const b = Math.round(parseInt(c.substring(4, 6), 16) * (1 - factor));
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
 
-  const menu = useQuery(
+interface HomeContentProps {
+  initialData: {
+    tenant: any;
+    menu: any;
+    todaySpecial: any;
+    publicEvents: any;
+    websiteData: any;
+  } | null;
+}
+
+export default function HomeContent({ initialData }: HomeContentProps) {
+  const { tenant: clientTenant, tenantId } = useTenant();
+
+  // Use SSR data first, fall back to client-side queries
+  const tenant = initialData?.tenant ?? clientTenant;
+
+  const clientMenu = useQuery(
     api.public.queries.getFullMenu,
-    tenantId ? { tenantId } : 'skip'
+    !initialData && tenantId ? { tenantId } : 'skip'
   );
 
-  const todaySpecial = useQuery(
+  const clientTodaySpecial = useQuery(
     api.public.queries.getTodaySpecial,
-    tenantId ? { tenantId } : 'skip'
+    !initialData && tenantId ? { tenantId } : 'skip'
   );
 
-  const publicEvents = useQuery(
+  const clientPublicEvents = useQuery(
     api.public.queries.getPublicEvents,
-    tenantId ? { tenantId } : 'skip'
+    !initialData && tenantId ? { tenantId } : 'skip'
   );
 
-  const websiteData = useQuery(
+  const clientWebsiteData = useQuery(
     api.public.queries.getTenantWebsite,
-    tenant?.subdomain ? { subdomain: tenant.subdomain } : 'skip'
+    !initialData && tenant?.subdomain ? { subdomain: tenant.subdomain } : 'skip'
   );
+
+  const menu = initialData?.menu ?? clientMenu;
+  const todaySpecial = initialData?.todaySpecial ?? clientTodaySpecial;
+  const publicEvents = initialData?.publicEvents ?? clientPublicEvents;
+  const websiteData = initialData?.websiteData ?? clientWebsiteData;
 
   if (!tenant) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center bg-[#1a1a1a]">
-        <div className="animate-pulse text-white/40 text-lg">Loading...</div>
+        <div role="status" aria-live="polite" className="animate-pulse motion-reduce:animate-none text-white/70 text-lg">Loading...</div>
       </div>
     );
   }
@@ -42,14 +69,16 @@ export default function HomeContent() {
   // Tenant-configurable colors with fallbacks
   const primaryColor = tenant.primaryColor || '#d32f2f';
   const accentColor = tenant.accentColor || '#f9c80e';
+  // Darkened variant of primary for text on light backgrounds (WCAG AA contrast)
+  const primaryTextColor = darkenColor(primaryColor, 0.25);
 
   // Tenant-configurable content with fallbacks
   const heroHeading = websiteData?.heroHeading || 'Soul Food.';
   const heroSubheading = websiteData?.heroSubheading || 'Made Fresh Daily.';
   const deliveryMessage = websiteData?.deliveryMessage || 'Yes We Deliver';
   const deliveryPartners = websiteData?.deliveryPartners || [
-    { name: 'DoorDash', color: '#FF3008' },
-    { name: 'Uber Eats', color: '#06C167' },
+    { name: 'DoorDash', color: '#C12508' },
+    { name: 'Uber Eats', color: '#047A3E' },
   ];
 
   const today = new Date().getDay();
@@ -90,9 +119,9 @@ export default function HomeContent() {
           <h1 className="text-5xl sm:text-6xl lg:text-8xl font-black text-white tracking-tight leading-none mb-4" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
             {heroHeading}
           </h1>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-light tracking-wide mb-8" style={{ fontFamily: '"Playfair Display", Georgia, serif', color: accentColor }}>
+          <p className="text-3xl sm:text-4xl lg:text-5xl font-light tracking-wide mb-8" style={{ fontFamily: '"Playfair Display", Georgia, serif', color: accentColor }}>
             {heroSubheading}
-          </h2>
+          </p>
 
           {tenant.tagline && (
             <p className="text-white/70 text-lg max-w-lg mb-10">
@@ -102,23 +131,23 @@ export default function HomeContent() {
 
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-4 mb-12">
-            <Link href="/order">
-              <button
-                className="w-full sm:w-auto text-white font-bold text-lg px-10 py-4 rounded-full tracking-wide transition-colors shadow-lg"
-                style={{ backgroundColor: primaryColor }}
-              >
-                ORDER NOW
-              </button>
+            <Link
+              href="/order"
+              className="w-full sm:w-auto text-white font-bold text-lg px-10 py-4 rounded-full tracking-wide transition-colors shadow-lg inline-block text-center"
+              style={{ backgroundColor: primaryColor }}
+            >
+              ORDER NOW
             </Link>
-            <Link href="/our-menu">
-              <button className="w-full sm:w-auto bg-transparent hover:bg-white/10 text-white font-semibold text-lg px-10 py-4 rounded-full border-2 border-white/30 transition-colors">
-                VIEW MENU
-              </button>
+            <Link
+              href="/our-menu"
+              className="w-full sm:w-auto bg-transparent hover:bg-white/10 text-white font-semibold text-lg px-10 py-4 rounded-full border-2 border-white/30 transition-colors inline-block text-center"
+            >
+              VIEW MENU
             </Link>
           </div>
 
           {/* Quick info pills */}
-          <div className="flex items-center gap-4 flex-wrap text-white/50 text-sm">
+          <div className="flex items-center gap-4 flex-wrap text-white/70 text-sm">
             {todayHours && !todayHours.isClosed && (
               <span className="flex items-center gap-1.5 bg-white/5 px-4 py-2 rounded-full">
                 <Clock className="h-3.5 w-3.5" />
@@ -151,7 +180,7 @@ export default function HomeContent() {
           ════════════════════════════════════════════════ */}
       <section className="bg-white py-5 border-b">
         <div className="max-w-6xl mx-auto px-6 flex items-center justify-center gap-8 flex-wrap">
-          <span className="font-bold text-sm uppercase tracking-widest flex items-center gap-2" style={{ color: primaryColor }}>
+          <span className="font-bold text-sm uppercase tracking-widest flex items-center gap-2" style={{ color: primaryTextColor }}>
             <Truck className="h-4 w-4" />
             {deliveryMessage}
           </span>
@@ -167,7 +196,7 @@ export default function HomeContent() {
             ))}
           </div>
           {tenant.address && (
-            <span className="text-gray-500 text-sm flex items-center gap-1.5">
+            <span className="text-gray-600 text-sm flex items-center gap-1.5">
               <MapPin className="h-3.5 w-3.5" />
               {tenant.address.street}, {tenant.address.city}, {tenant.address.state} {tenant.address.zip}
             </span>
@@ -181,7 +210,7 @@ export default function HomeContent() {
       <section className="py-16 bg-white">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-12">
-            <p className="font-bold text-sm uppercase tracking-widest mb-2" style={{ color: primaryColor }}>From Our Kitchen</p>
+            <p className="font-bold text-sm uppercase tracking-widest mb-2" style={{ color: primaryTextColor }}>From Our Kitchen</p>
             <h2 className="text-4xl lg:text-5xl font-bold text-[#1a1a1a]" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
               Home Cooked Favorites
             </h2>
@@ -194,10 +223,11 @@ export default function HomeContent() {
           </div>
 
           <div className="text-center mt-10">
-            <Link href="/our-menu">
-              <button className="bg-[#1a1a1a] hover:bg-[#333] text-white font-semibold px-8 py-3.5 rounded-full transition-colors">
-                View Full Menu <ArrowRight className="inline h-4 w-4 ml-2" />
-              </button>
+            <Link
+              href="/our-menu"
+              className="bg-[#1a1a1a] hover:bg-[#333] text-white font-semibold px-8 py-3.5 rounded-full transition-colors inline-block"
+            >
+              View Full Menu <ArrowRight aria-hidden="true" className="inline h-4 w-4 ml-2" />
             </Link>
           </div>
         </div>
@@ -211,7 +241,7 @@ export default function HomeContent() {
           <div className="max-w-6xl mx-auto px-6">
             <Link href="/events" className="block group">
               <div className="text-center">
-                <p className="text-[#1a1a1a]/60 font-bold text-sm uppercase tracking-widest mb-2">
+                <p className="text-[#1a1a1a] font-bold text-sm uppercase tracking-widest mb-2">
                   Every {publicEvents[0]!.dayOfWeek !== undefined ? DAYS[publicEvents[0]!.dayOfWeek!] : 'Week'}
                   {' · '}{publicEvents[0]!.startTime} – {publicEvents[0]!.endTime}
                 </p>
@@ -243,7 +273,7 @@ export default function HomeContent() {
                   </div>
                 )}
 
-                <p className="text-[#1a1a1a]/50 text-sm mt-6 group-hover:text-[#1a1a1a]/70 transition-colors">
+                <p className="text-[#1a1a1a] text-sm mt-6 group-hover:underline transition-colors">
                   View Details →
                 </p>
               </div>
@@ -270,7 +300,7 @@ export default function HomeContent() {
                   {todaySpecial.name}
                 </h2>
                 {todaySpecial.description && (
-                  <p className="text-white/50 mt-2 max-w-md mx-auto">{todaySpecial.description}</p>
+                  <p className="text-white/70 mt-2 max-w-md mx-auto">{todaySpecial.description}</p>
                 )}
               </div>
 
@@ -279,14 +309,14 @@ export default function HomeContent() {
                   <div key={idx} className="flex items-center justify-between bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl px-5 py-4 group-hover:bg-white/10 transition-colors">
                     <div>
                       <p className="font-semibold text-white">{item.name}</p>
-                      {item.description && <p className="text-white/40 text-sm">{item.description}</p>}
+                      {item.description && <p className="text-white/70 text-sm">{item.description}</p>}
                     </div>
                     <span className="text-2xl font-black ml-4" style={{ color: accentColor }}>${(item.price / 100).toFixed(2)}</span>
                   </div>
                 ))}
               </div>
 
-              <p className="text-center text-white/30 text-sm mt-6 group-hover:text-white/50 transition-colors">
+              <p className="text-center text-white/70 text-sm mt-6 group-hover:text-white/70 transition-colors">
                 View all specials →
               </p>
             </Link>
@@ -295,7 +325,7 @@ export default function HomeContent() {
       ) : (
         <section className="py-12 bg-[#1a1a1a]">
           <div className="max-w-4xl mx-auto px-6 text-center">
-            <p className="text-white/50 text-lg mb-3">Check our daily specials throughout the week</p>
+            <p className="text-white/70 text-lg mb-3">Check our daily specials throughout the week</p>
             <Link href="/events" className="font-semibold hover:underline" style={{ color: accentColor }}>
               View All Specials →
             </Link>
@@ -310,14 +340,14 @@ export default function HomeContent() {
         <section className="py-0 bg-white">
           <div className="grid grid-cols-4 md:grid-cols-8">
             {itemsWithImages.slice(0, 8).map((item: any, idx: number) => (
-              <div key={idx} className="aspect-square overflow-hidden relative group">
+              <div key={idx} tabIndex={0} className="aspect-square overflow-hidden relative group">
                 <img
                   src={item.imageUrl}
                   alt={item.name}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                  className="w-full h-full object-cover group-hover:scale-110 group-focus-within:scale-110 transition-transform duration-500"
                 />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors flex items-end">
-                  <p className="text-white text-xs font-medium p-2 opacity-0 group-hover:opacity-100 transition-opacity truncate w-full">
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 group-focus-within:bg-black/50 transition-colors flex items-end">
+                  <p className="text-white text-xs font-medium p-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity truncate w-full">
                     {item.name}
                   </p>
                 </div>
@@ -334,7 +364,7 @@ export default function HomeContent() {
         <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-2 gap-12">
           {/* About */}
           <div>
-            <p className="font-bold text-sm uppercase tracking-widest mb-3" style={{ color: primaryColor }}>About Us</p>
+            <p className="font-bold text-sm uppercase tracking-widest mb-3" style={{ color: primaryTextColor }}>About Us</p>
             <h2 className="text-3xl font-bold text-[#1a1a1a] mb-4" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
               {tenant.name}
             </h2>
@@ -342,13 +372,13 @@ export default function HomeContent() {
               <p className="text-[#4a4a4a] leading-relaxed mb-6">{tenant.aboutText}</p>
             )}
             <Link href="/about">
-              <span className="font-semibold text-sm hover:underline" style={{ color: primaryColor }}>Read Our Story →</span>
+              <span className="font-semibold text-sm hover:underline" style={{ color: primaryTextColor }}>Read Our Story →</span>
             </Link>
           </div>
 
           {/* Hours */}
           <div>
-            <p className="font-bold text-sm uppercase tracking-widest mb-3" style={{ color: primaryColor }}>Hours</p>
+            <p className="font-bold text-sm uppercase tracking-widest mb-3" style={{ color: primaryTextColor }}>Hours</p>
             <h2 className="text-3xl font-bold text-[#1a1a1a] mb-4" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
               Visit Us
             </h2>
@@ -395,19 +425,22 @@ export default function HomeContent() {
           <h2 className="text-4xl lg:text-5xl font-black text-white mb-3" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
             Ready to Eat?
           </h2>
-          <p className="text-white/70 text-lg mb-8 max-w-md mx-auto">
+          <p className="text-white text-lg mb-8 max-w-md mx-auto">
             Order online for faster pickup. We&apos;ll have it ready when you arrive.
           </p>
           <div className="flex gap-4 justify-center flex-wrap">
-            <Link href="/order">
-              <button className="bg-white font-bold text-lg px-10 py-4 rounded-full hover:bg-white/90 transition-colors shadow-lg" style={{ color: primaryColor }}>
-                Order Now
-              </button>
+            <Link
+              href="/order"
+              className="bg-white font-bold text-lg px-10 py-4 rounded-full hover:bg-white/90 transition-colors shadow-lg inline-block text-center"
+              style={{ color: primaryTextColor }}
+            >
+              Order Now
             </Link>
-            <Link href="/our-menu">
-              <button className="bg-transparent text-white font-semibold text-lg px-10 py-4 rounded-full border-2 border-white/40 hover:bg-white/10 transition-colors">
-                View Menu
-              </button>
+            <Link
+              href="/our-menu"
+              className="bg-transparent text-white font-semibold text-lg px-10 py-4 rounded-full border-2 border-white/40 hover:bg-white/10 transition-colors inline-block text-center"
+            >
+              View Menu
             </Link>
           </div>
         </div>
@@ -423,7 +456,7 @@ function FoodCard({ item, large, accentColor }: { item: any; large?: boolean; ac
   const imgSrc = item.imageUrl;
 
   return (
-    <div className={`relative rounded-2xl overflow-hidden group cursor-pointer ${large ? 'row-span-2 col-span-2 lg:col-span-1 lg:row-span-2' : ''}`}>
+    <div className={`relative rounded-2xl overflow-hidden group ${large ? 'row-span-2 col-span-2 lg:col-span-1 lg:row-span-2' : ''}`}>
       <div className={`${large ? 'aspect-[3/4]' : 'aspect-square'} bg-gray-100`}>
         {imgSrc && (
           <img

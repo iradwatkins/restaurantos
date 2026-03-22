@@ -12,6 +12,7 @@ export default async function WebsiteLayout({ children }: { children: React.Reac
   let themeCSS = '';
   let logoUrl = '';
   let hasCatering = false;
+  let hasReservations = false;
   let phone = '';
   let email = '';
   let address: any = null;
@@ -26,6 +27,7 @@ export default async function WebsiteLayout({ children }: { children: React.Reac
         tenantName = resolved.tenant.name;
         logoUrl = resolved.tenant.logoUrl ?? '';
         hasCatering = resolved.tenant.features?.catering ?? false;
+        hasReservations = resolved.tenant.reservationsEnabled ?? false;
         phone = resolved.tenant.phone ?? '';
         email = resolved.tenant.email ?? '';
         address = resolved.tenant.address;
@@ -46,6 +48,7 @@ export default async function WebsiteLayout({ children }: { children: React.Reac
         tenantName={tenantName}
         logoUrl={logoUrl}
         hasCatering={hasCatering}
+        hasReservations={hasReservations}
         phone={phone}
         email={email}
         address={address}

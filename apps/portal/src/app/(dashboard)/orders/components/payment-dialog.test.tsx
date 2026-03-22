@@ -83,8 +83,13 @@ describe('PaymentDialog', () => {
     props.showPayDialog = 'order-1';
     const user = userEvent.setup();
     render(<PaymentDialog {...props} />);
+    // Step 1: Click Cash to open the CashTender
     await user.click(screen.getByText('Cash'));
-    expect(props.handleCashPayment).toHaveBeenCalledWith('order-1', 5499);
+    // Step 2: Click Exact to set amount to order total
+    await user.click(screen.getByText('Exact'));
+    // Step 3: Click Complete Payment to trigger the handler
+    await user.click(screen.getByText('Complete Payment'));
+    expect(props.handleCashPayment).toHaveBeenCalledWith('order-1', 5499, 0, 'cash');
   });
 
   it('shows toast info when Card is clicked (Stripe not configured)', async () => {

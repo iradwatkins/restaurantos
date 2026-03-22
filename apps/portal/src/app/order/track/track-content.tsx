@@ -66,7 +66,7 @@ export default function OrderTrackPage() {
   }
 
   if (!tenantId) {
-    return <div className="text-center py-20 text-muted-foreground">Loading...</div>;
+    return <div role="status" aria-live="polite" className="text-center py-20 text-muted-foreground">Loading...</div>;
   }
 
   return (
@@ -137,6 +137,9 @@ export default function OrderTrackPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg">Order #{order.orderNumber}</CardTitle>
+              <div aria-live="polite" className="sr-only">
+                Order status updated: {order.status.replace('_', ' ')}
+              </div>
               <Badge
                 variant={
                   order.status === 'ready' || order.status === 'completed'
@@ -177,7 +180,7 @@ export default function OrderTrackPage() {
                       {step.label}
                     </span>
                     {isCurrent && order.status !== 'completed' && (
-                      <span className="text-xs text-primary animate-pulse ml-auto">
+                      <span className="text-xs text-primary animate-pulse motion-reduce:animate-none ml-auto">
                         Current
                       </span>
                     )}

@@ -67,7 +67,6 @@ describe('login-rate-limit', () => {
 
   it('resets after the 15-minute window expires', () => {
     const key = 'test-window-expire';
-    const realNow = Date.now;
 
     let currentTime = 1000000;
     vi.spyOn(Date, 'now').mockImplementation(() => currentTime);

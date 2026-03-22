@@ -6,8 +6,14 @@ import { MapPin, Phone, Mail, Clock } from 'lucide-react';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-export default function ContactPage() {
-  const { tenant } = useTenant();
+interface ContactPageProps {
+  initialTenant: any | null;
+}
+
+export default function ContactPage({ initialTenant }: ContactPageProps) {
+  const { tenant: clientTenant } = useTenant();
+
+  const tenant = initialTenant ?? clientTenant;
 
   if (!tenant) {
     return <div className="text-center py-20 text-muted-foreground">Loading...</div>;

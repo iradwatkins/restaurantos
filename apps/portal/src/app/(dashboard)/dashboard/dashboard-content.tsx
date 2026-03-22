@@ -107,11 +107,11 @@ export default function PortalDashboardPage() {
               <ChefHat className="h-8 w-8 text-primary" />
               <div>
                 <p className="font-semibold">Kitchen Display</p>
-                <p className="text-sm text-muted-foreground">
+                <span className="text-sm text-muted-foreground">
                   {kdsCount > 0 ? (
                     <Badge variant="destructive" className="text-xs">{kdsCount} tickets</Badge>
                   ) : 'All clear'}
-                </p>
+                </span>
               </div>
             </CardContent>
           </Card>

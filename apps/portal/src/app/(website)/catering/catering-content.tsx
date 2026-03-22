@@ -26,13 +26,25 @@ interface CateringCartItem {
   lineTotal: number;
 }
 
-export default function CateringPage() {
-  const { tenant, tenantId } = useTenant();
+interface CateringPageProps {
+  initialData: {
+    tenant: any;
+    cateringMenu: any;
+  } | null;
+}
 
-  const cateringMenu = useQuery(
+export default function CateringPage({ initialData }: CateringPageProps) {
+  const { tenant: clientTenant, tenantId: clientTenantId } = useTenant();
+
+  const tenant = initialData?.tenant ?? clientTenant;
+  const tenantId = initialData?.tenant?._id ?? clientTenantId;
+
+  const clientCateringMenu = useQuery(
     api.public.queries.getCateringMenu,
-    tenantId ? { tenantId } : 'skip'
+    !initialData && tenantId ? { tenantId } : 'skip'
   );
+
+  const cateringMenu = initialData?.cateringMenu ?? clientCateringMenu;
 
   const placeCateringOrder = useMutation(api.catering.mutations.placeCateringOrder);
 
@@ -338,9 +350,11 @@ export default function CateringPage() {
                         <Input id="headcount" name="headcount" type="number" min="1" required />
                       </div>
                       <div className="space-y-2">
-                        <Label>Fulfillment</Label>
+                        <Label htmlFor="fulfillmentType">Fulfillment</Label>
                         <select
+                          id="fulfillmentType"
                           name="fulfillmentType"
+                          aria-label="Fulfillment type"
                           defaultValue="pickup"
                           className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                         >

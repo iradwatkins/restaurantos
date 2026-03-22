@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { api } from '@restaurantos/backend';
 import { convexClient } from '@/lib/auth/convex-client';
-import { hash } from 'bcryptjs';
 import { getSession } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 
@@ -48,11 +47,10 @@ export async function POST(request: Request) {
     });
 
     // Create owner user
-    const passwordHash = await hash(data.ownerPassword, 12);
     await convexClient.mutation(api.users.mutations.create, {
       tenantId,
       email: data.ownerEmail,
-      passwordHash,
+      password: data.ownerPassword,
       name: data.ownerName,
       role: 'owner',
     });

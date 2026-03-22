@@ -20,7 +20,7 @@ import {
   DialogFooter,
   Separator,
 } from '@restaurantos/ui';
-import { Plus, Pencil, Trash2, Ban, Check, Upload, Star, Wine, ImageIcon, Settings2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Ban, Check, Upload, Star, Wine, ImageIcon, Settings2, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Doc, Id } from '@restaurantos/backend/dataModel';
 
@@ -66,6 +66,14 @@ export default function MenuPage() {
   const createModifierOption = useMutation(api.menu.mutations.createModifierOption);
   const deleteModifierOption = useMutation(api.menu.mutations.deleteModifierOption);
 
+  const allIngredients = useQuery(
+    api.inventory.queries.getIngredients,
+    tenantId ? { tenantId } : 'skip'
+  );
+  const linkIngredient = useMutation(api.inventory.mutations.linkIngredient);
+  const unlinkIngredient = useMutation(api.inventory.mutations.unlinkIngredient);
+  const updateIngredientQuantity = useMutation(api.inventory.mutations.updateIngredientQuantity);
+
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   const [showItemDialog, setShowItemDialog] = useState(false);
   const [showModifierDialog, setShowModifierDialog] = useState(false);
@@ -77,6 +85,7 @@ export default function MenuPage() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [managingModifiersFor, setManagingModifiersFor] = useState<Doc<"menuItems"> | null>(null);
+  const [managingIngredientsFor, setManagingIngredientsFor] = useState<Doc<"menuItems"> | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   if (!tenantId) {
@@ -102,7 +111,7 @@ export default function MenuPage() {
         toast.success('Category updated');
       } else {
         await createCategory({
-          tenantId,
+          tenantId: tenantId!,
           name: form.get('name') as string,
           description: (form.get('description') as string) || undefined,
           menuType: menuType as 'all' | 'lunch' | 'dinner',
@@ -176,7 +185,7 @@ export default function MenuPage() {
           return;
         }
         await createItem({
-          tenantId,
+          tenantId: tenantId!,
           categoryId: selectedCategory as Id<"menuCategories">,
           name: form.get('name') as string,
           description: (form.get('description') as string) || undefined,
@@ -267,7 +276,7 @@ export default function MenuPage() {
       } else {
         if (!managingModifiersFor) return;
         await createModifierGroup({
-          tenantId,
+          tenantId: tenantId!,
           name: form.get('name') as string,
           minSelections: parseInt(form.get('minSelections') as string),
           maxSelections: parseInt(form.get('maxSelections') as string),
@@ -285,7 +294,7 @@ export default function MenuPage() {
   async function handleAddModifierOption(groupId: Id<'modifierGroups'>, name: string, priceStr: string) {
     try {
       await createModifierOption({
-        tenantId,
+        tenantId: tenantId!,
         groupId,
         name,
         priceAdjustment: Math.round(parseFloat(priceStr || '0') * 100),
@@ -532,6 +541,17 @@ export default function MenuPage() {
                       title="Manage modifiers"
                     >
                       <Settings2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => {
+                        setManagingIngredientsFor(item);
+                      }}
+                      title="Manage ingredients"
+                    >
+                      <Package className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -801,6 +821,30 @@ export default function MenuPage() {
         </DialogContent>
       </Dialog>
 
+      {/* ==================== Ingredient Linking Dialog ==================== */}
+      <Dialog
+        open={!!managingIngredientsFor}
+        onOpenChange={(open) => {
+          if (!open) setManagingIngredientsFor(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Ingredients for {managingIngredientsFor?.name}</DialogTitle>
+          </DialogHeader>
+          {managingIngredientsFor && (
+            <MenuItemIngredientsSection
+              menuItemId={managingIngredientsFor._id}
+              tenantId={tenantId!}
+              allIngredients={allIngredients ?? []}
+              linkIngredient={linkIngredient}
+              unlinkIngredient={unlinkIngredient}
+              updateIngredientQuantity={updateIngredientQuantity}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* ==================== Modifier Management Dialog ==================== */}
       <Dialog
         open={!!managingModifiersFor}
@@ -1019,5 +1063,225 @@ function ModifierGroupCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// ==================== Menu Item Ingredients Sub-component ====================
+
+function MenuItemIngredientsSection({
+  menuItemId,
+  tenantId,
+  allIngredients,
+  linkIngredient,
+  unlinkIngredient,
+  updateIngredientQuantity,
+}: {
+  menuItemId: Id<'menuItems'>;
+  tenantId: Id<'tenants'>;
+  allIngredients: any[];
+  linkIngredient: any;
+  unlinkIngredient: any;
+  updateIngredientQuantity: any;
+}) {
+  const linkedIngredients = useQuery(api.inventory.queries.getMenuItemIngredients, {
+    menuItemId,
+  });
+
+  const [addIngId, setAddIngId] = useState('');
+  const [addIngQty, setAddIngQty] = useState('');
+  const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
+  const [editQty, setEditQty] = useState('');
+
+  // Filter out already-linked ingredients
+  const availableIngredients = allIngredients.filter(
+    (ing) =>
+      ing.isActive !== false &&
+      !linkedIngredients?.some((link) => link.ingredient._id === ing._id)
+  );
+
+  async function handleLink() {
+    if (!addIngId || !addIngQty) return;
+    try {
+      await linkIngredient({
+        tenantId,
+        menuItemId,
+        ingredientId: addIngId as Id<'ingredients'>,
+        quantity: parseFloat(addIngQty),
+      });
+      toast.success('Ingredient linked');
+      setAddIngId('');
+      setAddIngQty('');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to link ingredient');
+    }
+  }
+
+  async function handleUnlink(linkId: Id<'menuItemIngredients'>) {
+    try {
+      await unlinkIngredient({ id: linkId });
+      toast.success('Ingredient unlinked');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to unlink');
+    }
+  }
+
+  async function handleUpdateQty(linkId: Id<'menuItemIngredients'>) {
+    if (!editQty) return;
+    try {
+      await updateIngredientQuantity({
+        id: linkId,
+        quantity: parseFloat(editQty),
+      });
+      toast.success('Quantity updated');
+      setEditingLinkId(null);
+      setEditQty('');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update quantity');
+    }
+  }
+
+  return (
+    <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+      {/* Linked ingredients */}
+      {linkedIngredients && linkedIngredients.length > 0 && (
+        <div className="space-y-2">
+          {linkedIngredients.map((link) => (
+            <div
+              key={link.linkId}
+              className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{link.ingredient.name}</span>
+                {link.ingredient.isLowStock && (
+                  <Badge variant="destructive" className="text-[10px]">Low</Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {editingLinkId === link.linkId ? (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={editQty}
+                      onChange={(e) => setEditQty(e.target.value)}
+                      className="h-7 w-20 text-xs"
+                      autoFocus
+                    />
+                    <span className="text-xs text-muted-foreground">{link.ingredient.unit}</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => handleUpdateQty(link.linkId)}
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        setEditingLinkId(null);
+                        setEditQty('');
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <span
+                      className="text-muted-foreground cursor-pointer hover:text-foreground"
+                      onClick={() => {
+                        setEditingLinkId(link.linkId);
+                        setEditQty(String(link.quantity));
+                      }}
+                      title="Click to edit quantity"
+                    >
+                      {link.quantity} {link.ingredient.unit}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      (${((link.quantity * link.ingredient.costPerUnit) / 100).toFixed(2)})
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-destructive"
+                      onClick={() => handleUnlink(link.linkId)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+          <Separator />
+          <div className="text-sm text-muted-foreground">
+            Total ingredient cost:{' '}
+            <strong>
+              $
+              {(
+                linkedIngredients.reduce(
+                  (sum, l) => sum + l.quantity * l.ingredient.costPerUnit,
+                  0
+                ) / 100
+              ).toFixed(2)}
+            </strong>
+          </div>
+        </div>
+      )}
+
+      {linkedIngredients && linkedIngredients.length === 0 && (
+        <p className="text-sm text-muted-foreground text-center py-4">
+          No ingredients linked yet. Add ingredients to track food cost.
+        </p>
+      )}
+
+      <Separator />
+
+      {/* Add ingredient form */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Add Ingredient</Label>
+        <div className="flex gap-2">
+          <select
+            value={addIngId}
+            onChange={(e) => setAddIngId(e.target.value)}
+            className="flex h-9 flex-1 rounded-md border border-input bg-background px-3 py-1 text-sm"
+          >
+            <option value="">Select ingredient...</option>
+            {availableIngredients.map((ing) => (
+              <option key={ing._id} value={ing._id}>
+                {ing.name} ({ing.unit})
+              </option>
+            ))}
+          </select>
+          <Input
+            type="number"
+            step="0.01"
+            min="0.01"
+            placeholder="Qty"
+            value={addIngQty}
+            onChange={(e) => setAddIngQty(e.target.value)}
+            className="h-9 w-24"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9"
+            onClick={handleLink}
+            disabled={!addIngId || !addIngQty}
+          >
+            <Plus className="h-3 w-3" />
+          </Button>
+        </div>
+        {availableIngredients.length === 0 && allIngredients.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            No ingredients in inventory. Add ingredients in the Inventory page first.
+          </p>
+        )}
+      </div>
+    </div>
   );
 }

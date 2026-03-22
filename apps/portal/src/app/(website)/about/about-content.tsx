@@ -9,19 +9,33 @@ import { ArrowRight, MapPin, Phone, Mail } from 'lucide-react';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-export default function AboutPage() {
-  const { tenant } = useTenant();
+interface AboutPageProps {
+  initialData: {
+    tenant: any;
+    websiteData: any;
+  } | null;
+}
 
-  const websiteData = useQuery(
+export default function AboutPage({ initialData }: AboutPageProps) {
+  const { tenant: clientTenant } = useTenant();
+
+  const tenant = initialData?.tenant ?? clientTenant;
+
+  const clientWebsiteData = useQuery(
     api.public.queries.getTenantWebsite,
-    tenant?.subdomain ? { subdomain: tenant.subdomain } : 'skip'
+    !initialData && tenant?.subdomain ? { subdomain: tenant.subdomain } : 'skip'
   );
+
+  const websiteData = initialData?.websiteData ?? clientWebsiteData;
 
   if (!tenant) {
     return <div className="text-center py-20 text-muted-foreground">Loading...</div>;
   }
 
   const primaryColor = tenant.primaryColor || '#d32f2f';
+  // Darken primary for text on light backgrounds (WCAG AA contrast)
+  const c = primaryColor.replace('#', '');
+  const primaryTextColor = `#${Math.round(parseInt(c.substring(0, 2), 16) * 0.75).toString(16).padStart(2, '0')}${Math.round(parseInt(c.substring(2, 4), 16) * 0.75).toString(16).padStart(2, '0')}${Math.round(parseInt(c.substring(4, 6), 16) * 0.75).toString(16).padStart(2, '0')}`;
   const heroImage = websiteData?.heroImageUrl;
 
   return (
@@ -51,7 +65,7 @@ export default function AboutPage() {
         )}
 
         {tenant.tagline && (
-          <p className="text-xl text-center mb-10" style={{ color: primaryColor, fontFamily: '"Playfair Display", Georgia, serif' }}>
+          <p className="text-xl text-center mb-10" style={{ color: primaryTextColor, fontFamily: '"Playfair Display", Georgia, serif' }}>
             {tenant.tagline}
           </p>
         )}

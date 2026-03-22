@@ -1,6 +1,7 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
 import { validateEmail } from "../lib/validators";
+import { requireSuperAdmin } from "../lib/auth";
 
 export const createAdminUser = mutation({
   args: {
@@ -14,6 +15,11 @@ export const createAdminUser = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    // Auth guard: only existing super admins can create new admin users.
+    // The initial super admin must be created via the seed script (convex/seed.ts)
+    // or directly through the Convex dashboard.
+    await requireSuperAdmin(ctx);
+
     validateEmail(args.email);
     const existing = await ctx.db
       .query("adminUsers")
@@ -81,6 +87,8 @@ export const updateTenant = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    await requireSuperAdmin(ctx);
+
     const { id, ...updates } = args;
     const cleanUpdates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(updates)) {
@@ -96,12 +104,15 @@ export const updateTenant = mutation({
 export const suspendTenant = mutation({
   args: { id: v.id("tenants") },
   handler: async (ctx, args) => {
+    const admin = await requireSuperAdmin(ctx);
+
     await ctx.db.patch(args.id, { status: "suspended", updatedAt: Date.now() });
     await ctx.db.insert("auditLogs", {
       action: "update",
       entityType: "tenant",
       entityId: args.id,
       userType: "admin",
+      userId: admin._id,
       newValues: { status: "suspended" },
       createdAt: Date.now(),
     });
@@ -111,12 +122,15 @@ export const suspendTenant = mutation({
 export const activateTenant = mutation({
   args: { id: v.id("tenants") },
   handler: async (ctx, args) => {
+    const admin = await requireSuperAdmin(ctx);
+
     await ctx.db.patch(args.id, { status: "active", updatedAt: Date.now() });
     await ctx.db.insert("auditLogs", {
       action: "update",
       entityType: "tenant",
       entityId: args.id,
       userType: "admin",
+      userId: admin._id,
       newValues: { status: "active" },
       createdAt: Date.now(),
     });
@@ -126,6 +140,8 @@ export const activateTenant = mutation({
 export const deleteTenant = mutation({
   args: { id: v.id("tenants") },
   handler: async (ctx, args) => {
+    const admin = await requireSuperAdmin(ctx);
+
     // Soft delete — set status to churned
     await ctx.db.patch(args.id, { status: "churned", updatedAt: Date.now() });
     await ctx.db.insert("auditLogs", {
@@ -133,6 +149,7 @@ export const deleteTenant = mutation({
       entityType: "tenant",
       entityId: args.id,
       userType: "admin",
+      userId: admin._id,
       createdAt: Date.now(),
     });
   },
@@ -149,6 +166,8 @@ export const bulkUpdateStatus = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    await requireSuperAdmin(ctx);
+
     for (const id of args.ids) {
       await ctx.db.patch(id, { status: args.status, updatedAt: Date.now() });
     }
