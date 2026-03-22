@@ -65,7 +65,7 @@ jobs:
           target: /tmp/restaurantos-deploy
 
       - name: Deploy with zero downtime
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         env:
           SHORT_SHA: ${{ steps.sha.outputs.short }}
         with:
@@ -214,7 +214,7 @@ jobs:
             echo "=== Deploy complete: ${SHORT_SHA} at $(date) ==="
 
       - name: Verify deployment
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}

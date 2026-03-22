@@ -27,7 +27,7 @@ jobs:
           echo "Rolling back to SHA: ${{ github.event.inputs.sha }}"
 
       - name: Rollback on VPS
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
@@ -69,7 +69,7 @@ jobs:
             echo "Rollback to ${SHA} complete at $(date)"
 
       - name: Verify rollback
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
