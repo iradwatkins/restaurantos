@@ -80,8 +80,9 @@ export const getCampaign = query({
     };
 
     for (const r of recipients) {
-      if (statusCounts[r.status] !== undefined) {
-        statusCounts[r.status]++;
+      const s = r.status as keyof typeof statusCounts;
+      if (statusCounts[s] !== undefined) {
+        statusCounts[s]++;
       }
     }
 

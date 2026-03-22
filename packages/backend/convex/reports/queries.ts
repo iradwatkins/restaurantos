@@ -1040,7 +1040,7 @@ export const getWasteReport = query({
       }
 
       // 3. Discounts — orders with discountAmount > 0 and not comped
-      if ((o.discountAmount ?? 0) > 0 && o.isComped !== true) {
+      if ((o.discountAmount ?? 0) > 0 && !o.isComped) {
         const discountAmount = o.discountAmount!;
         discountsCents += discountAmount;
         bucket.discountsCents += discountAmount;
