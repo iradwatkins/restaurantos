@@ -78,8 +78,9 @@ export default function HomeContent({ initialData }: HomeContentProps) {
   const heroSubheading = websiteData?.heroSubheading || 'Made Fresh Daily.';
   const deliveryMessage = websiteData?.deliveryMessage || 'Yes We Deliver';
   const deliveryPartners = websiteData?.deliveryPartners || [
-    { name: 'DoorDash', color: '#C12508' },
-    { name: 'Uber Eats', color: '#047A3E' },
+    { name: 'DoorDash', color: '#C12508', logo: '/doordash-logo.avif' },
+    { name: 'Uber Eats', color: '#047A3E', logo: '/ubereats-logo.avif' },
+    { name: 'Grubhub', color: '#F63440', logo: '/grubhub-logo.avif' },
   ];
 
   const today = new Date().getDay();
@@ -190,14 +191,25 @@ export default function HomeContent({ initialData }: HomeContentProps) {
             {deliveryMessage}
           </span>
           <div className="flex items-center gap-4">
-            {deliveryPartners.map((partner: { name: string; color: string }) => (
-              <span
-                key={partner.name}
-                className="text-white text-xs font-bold px-3 py-1.5 rounded"
-                style={{ backgroundColor: partner.color }}
-              >
-                {partner.name}
-              </span>
+            {deliveryPartners.map((partner: { name: string; color: string; logo?: string }) => (
+              partner.logo ? (
+                <Image
+                  key={partner.name}
+                  src={partner.logo}
+                  alt={partner.name}
+                  width={100}
+                  height={32}
+                  className="h-7 w-auto object-contain"
+                />
+              ) : (
+                <span
+                  key={partner.name}
+                  className="text-white text-xs font-bold px-3 py-1.5 rounded"
+                  style={{ backgroundColor: partner.color }}
+                >
+                  {partner.name}
+                </span>
+              )
             ))}
           </div>
           {tenant.address && (
