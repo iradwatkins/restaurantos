@@ -1,6 +1,11 @@
-import { mutation, internalMutation } from "../_generated/server";
+import { mutation, internalMutation, MutationCtx } from "../_generated/server";
 import { v } from "convex/values";
+import { Id } from "../_generated/dataModel";
 import { requireTenantAccess } from "../lib/tenant_auth";
+
+const channelValidator = v.optional(
+  v.union(v.literal("email"), v.literal("sms"), v.literal("both"))
+);
 
 export const createCampaign = mutation({
   args: {
@@ -9,10 +14,19 @@ export const createCampaign = mutation({
     subject: v.string(),
     body: v.string(),
     segmentFilter: v.string(),
+    channel: channelValidator,
+    smsBody: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireTenantAccess(ctx);
     if (user.tenantId !== args.tenantId) throw new Error("Forbidden");
+
+    const channel = args.channel ?? "email";
+
+    // Validate: SMS campaigns require smsBody
+    if ((channel === "sms" || channel === "both") && !args.smsBody) {
+      throw new Error("smsBody is required for SMS or multi-channel campaigns");
+    }
 
     const campaignId = await ctx.db.insert("campaigns", {
       tenantId: args.tenantId,
@@ -20,6 +34,8 @@ export const createCampaign = mutation({
       subject: args.subject,
       body: args.body,
       segmentFilter: args.segmentFilter,
+      channel,
+      smsBody: args.smsBody,
       status: "draft",
       recipientCount: 0,
       openCount: 0,
@@ -38,6 +54,8 @@ export const updateCampaign = mutation({
     subject: v.optional(v.string()),
     body: v.optional(v.string()),
     segmentFilter: v.optional(v.string()),
+    channel: channelValidator,
+    smsBody: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireTenantAccess(ctx);
@@ -49,11 +67,13 @@ export const updateCampaign = mutation({
       throw new Error("Only draft campaigns can be edited");
     }
 
-    const updates: Record<string, string> = {};
+    const updates: Record<string, string | undefined> = {};
     if (args.name !== undefined) updates.name = args.name;
     if (args.subject !== undefined) updates.subject = args.subject;
     if (args.body !== undefined) updates.body = args.body;
     if (args.segmentFilter !== undefined) updates.segmentFilter = args.segmentFilter;
+    if (args.channel !== undefined) updates.channel = args.channel;
+    if (args.smsBody !== undefined) updates.smsBody = args.smsBody;
 
     await ctx.db.patch(args.campaignId, updates);
     return args.campaignId;
@@ -88,6 +108,42 @@ export const scheduleCampaign = mutation({
   },
 });
 
+/**
+ * Check SMS rate limits for a customer.
+ * Returns true if the customer can receive an SMS, false if rate-limited.
+ *
+ * Limits: max 1 SMS per customer per day, max 4 per customer per month.
+ */
+async function checkSmsRateLimit(
+  ctx: MutationCtx,
+  customerId: Id<"customers">
+): Promise<boolean> {
+  const now = Date.now();
+  const oneDayAgo = now - 24 * 60 * 60 * 1000;
+  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+
+  const recentLogs = await ctx.db
+    .query("smsDeliveryLogs")
+    .withIndex("by_customerId_createdAt", (q) =>
+      q.eq("customerId", customerId).gte("createdAt", thirtyDaysAgo)
+    )
+    .collect();
+
+  const sentToday = recentLogs.filter(
+    (log) => log.createdAt >= oneDayAgo && log.status !== "failed"
+  ).length;
+
+  if (sentToday >= 1) return false;
+
+  const sentThisMonth = recentLogs.filter(
+    (log) => log.status !== "failed"
+  ).length;
+
+  if (sentThisMonth >= 4) return false;
+
+  return true;
+}
+
 export const sendCampaign = mutation({
   args: {
     campaignId: v.id("campaigns"),
@@ -100,6 +156,13 @@ export const sendCampaign = mutation({
     if (campaign.tenantId !== user.tenantId) throw new Error("Forbidden");
     if (campaign.status !== "draft" && campaign.status !== "scheduled") {
       throw new Error("Campaign must be in draft or scheduled status to send");
+    }
+
+    const channel = campaign.channel ?? "email";
+
+    // Validate SMS body exists for SMS campaigns
+    if ((channel === "sms" || channel === "both") && !campaign.smsBody) {
+      throw new Error("Campaign smsBody is required for SMS channel");
     }
 
     // Mark as sending
@@ -122,9 +185,7 @@ export const sendCampaign = mutation({
     const cutoffIndex = Math.max(0, Math.ceil(sorted.length * 0.1) - 1);
     const highSpenderThreshold = sorted[cutoffIndex]?.totalSpent ?? 0;
 
-    const matchingCustomers = allCustomers.filter((c) => {
-      if (!c.email) return false;
-
+    const matchesSegment = (c: (typeof allCustomers)[number]): boolean => {
       const daysSinceFirstOrder = now - c.firstOrderDate;
       const daysSinceLastOrder = c.lastOrderDate ? now - c.lastOrderDate : Infinity;
 
@@ -144,29 +205,67 @@ export const sendCampaign = mutation({
         default:
           return false;
       }
-    });
+    };
 
-    // Create recipient records
-    for (const customer of matchingCustomers) {
-      await ctx.db.insert("campaignRecipients", {
-        tenantId: campaign.tenantId,
-        campaignId: args.campaignId,
-        customerId: customer._id,
-        email: customer.email!,
-        status: "pending",
-      });
+    let totalRecipients = 0;
+
+    // Create email recipients
+    if (channel === "email" || channel === "both") {
+      const emailCustomers = allCustomers.filter(
+        (c) => c.email && matchesSegment(c)
+      );
+
+      for (const customer of emailCustomers) {
+        await ctx.db.insert("campaignRecipients", {
+          tenantId: campaign.tenantId,
+          campaignId: args.campaignId,
+          customerId: customer._id,
+          email: customer.email!,
+          channel: "email",
+          status: "pending",
+        });
+      }
+      totalRecipients += emailCustomers.length;
+    }
+
+    // Create SMS recipients
+    if (channel === "sms" || channel === "both") {
+      const smsEligible = allCustomers.filter(
+        (c) =>
+          c.phone &&
+          c.smsConsent === true &&
+          c.smsOptedOut !== true &&
+          matchesSegment(c)
+      );
+
+      for (const customer of smsEligible) {
+        // Check SMS rate limits before creating recipient
+        const withinLimit = await checkSmsRateLimit(ctx, customer._id);
+        if (!withinLimit) continue;
+
+        await ctx.db.insert("campaignRecipients", {
+          tenantId: campaign.tenantId,
+          campaignId: args.campaignId,
+          customerId: customer._id,
+          email: customer.email ?? "",
+          channel: "sms",
+          phone: customer.phone!,
+          status: "pending",
+        });
+        totalRecipients++;
+      }
     }
 
     // Mark campaign as sent with recipient count
     await ctx.db.patch(args.campaignId, {
       status: "sent",
       sentAt: now,
-      recipientCount: matchingCustomers.length,
+      recipientCount: totalRecipients,
     });
 
     return {
       campaignId: args.campaignId,
-      recipientCount: matchingCustomers.length,
+      recipientCount: totalRecipients,
     };
   },
 });
@@ -191,6 +290,124 @@ export const cancelCampaign = mutation({
     });
 
     return args.campaignId;
+  },
+});
+
+/**
+ * Process an SMS opt-out (STOP) or opt-in (START) for a phone number.
+ * Called by Twilio webhook when a customer replies STOP/START.
+ */
+export const processSmsOptOut = mutation({
+  args: {
+    tenantId: v.id("tenants"),
+    phone: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Find customer by phone within this tenant
+    const customers = await ctx.db
+      .query("customers")
+      .withIndex("by_tenantId_phone", (q) =>
+        q.eq("tenantId", args.tenantId).eq("phone", args.phone)
+      )
+      .collect();
+
+    if (customers.length === 0) {
+      // No matching customer — log but don't fail
+      return { found: false, phone: args.phone };
+    }
+
+    for (const customer of customers) {
+      await ctx.db.patch(customer._id, {
+        smsOptedOut: true,
+      });
+    }
+
+    return { found: true, count: customers.length, phone: args.phone };
+  },
+});
+
+/**
+ * Re-enable SMS consent when customer replies START.
+ */
+export const processSmsOptIn = mutation({
+  args: {
+    tenantId: v.id("tenants"),
+    phone: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const customers = await ctx.db
+      .query("customers")
+      .withIndex("by_tenantId_phone", (q) =>
+        q.eq("tenantId", args.tenantId).eq("phone", args.phone)
+      )
+      .collect();
+
+    if (customers.length === 0) {
+      return { found: false, phone: args.phone };
+    }
+
+    const now = Date.now();
+    for (const customer of customers) {
+      await ctx.db.patch(customer._id, {
+        smsConsent: true,
+        smsConsentAt: now,
+        smsOptedOut: false,
+      });
+    }
+
+    return { found: true, count: customers.length, phone: args.phone };
+  },
+});
+
+/**
+ * Create an SMS delivery log entry.
+ * Used by the API route after sending each SMS.
+ */
+export const createSmsDeliveryLog = mutation({
+  args: {
+    tenantId: v.id("tenants"),
+    customerId: v.optional(v.id("customers")),
+    campaignId: v.optional(v.id("campaigns")),
+    triggerId: v.optional(v.id("automatedTriggers")),
+    phone: v.string(),
+    message: v.string(),
+    status: v.union(
+      v.literal("sent"),
+      v.literal("delivered"),
+      v.literal("failed"),
+      v.literal("opted_out")
+    ),
+    twilioSid: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("smsDeliveryLogs", args);
+  },
+});
+
+/**
+ * Update a campaign recipient's status.
+ * Used by the API route after sending SMS.
+ */
+export const updateRecipientStatus = mutation({
+  args: {
+    recipientId: v.id("campaignRecipients"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("sent"),
+      v.literal("delivered"),
+      v.literal("opened"),
+      v.literal("clicked"),
+      v.literal("bounced"),
+      v.literal("failed")
+    ),
+    sentAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const updates: Record<string, string | number> = { status: args.status };
+    if (args.sentAt !== undefined) updates.sentAt = args.sentAt;
+    await ctx.db.patch(args.recipientId, updates);
   },
 });
 

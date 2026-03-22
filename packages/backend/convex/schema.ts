@@ -1004,6 +1004,12 @@ export default defineSchema({
     lastOrderDate: v.optional(v.number()), // epoch ms
     firstOrderDate: v.number(), // epoch ms
     notes: v.optional(v.string()),
+
+    // SMS consent (TCPA compliance)
+    smsConsent: v.optional(v.boolean()),
+    smsConsentAt: v.optional(v.number()), // epoch ms when consent was given
+    smsOptedOut: v.optional(v.boolean()), // customer replied STOP
+
     createdAt: v.number(),
   })
     .index("by_tenantId", ["tenantId"])
@@ -1204,6 +1210,8 @@ export default defineSchema({
     subject: v.string(),
     body: v.string(), // HTML string
     segmentFilter: v.string(), // segment name to target
+    channel: v.optional(v.union(v.literal("email"), v.literal("sms"), v.literal("both"))), // default "email" for backward compat
+    smsBody: v.optional(v.string()), // SMS message text (separate from HTML email body)
     status: v.union(
       v.literal("draft"),
       v.literal("scheduled"),
@@ -1225,13 +1233,16 @@ export default defineSchema({
     campaignId: v.id("campaigns"),
     customerId: v.id("customers"),
     email: v.string(),
+    channel: v.optional(v.union(v.literal("email"), v.literal("sms"))), // which channel this recipient was sent via
+    phone: v.optional(v.string()), // recipient phone for SMS
     status: v.union(
       v.literal("pending"),
       v.literal("sent"),
       v.literal("delivered"),
       v.literal("opened"),
       v.literal("clicked"),
-      v.literal("bounced")
+      v.literal("bounced"),
+      v.literal("failed")
     ),
     sentAt: v.optional(v.number()), // epoch ms
     openedAt: v.optional(v.number()), // epoch ms
@@ -1249,6 +1260,8 @@ export default defineSchema({
     ),
     templateSubject: v.string(),
     templateBody: v.string(), // HTML string
+    channel: v.optional(v.union(v.literal("email"), v.literal("sms"), v.literal("both"))), // default "email"
+    smsTemplate: v.optional(v.string()), // SMS body template with merge tags
     isActive: v.boolean(),
     lastRunAt: v.optional(v.number()), // epoch ms
     createdAt: v.number(),
@@ -1336,4 +1349,26 @@ export default defineSchema({
   })
     .index("by_giftCardId", ["giftCardId"])
     .index("by_tenantId", ["tenantId"]),
+
+  // ==================== SMS Delivery Logs ====================
+  smsDeliveryLogs: defineTable({
+    tenantId: v.id("tenants"),
+    customerId: v.optional(v.id("customers")),
+    campaignId: v.optional(v.id("campaigns")),
+    triggerId: v.optional(v.id("automatedTriggers")),
+    phone: v.string(),
+    message: v.string(),
+    status: v.union(
+      v.literal("sent"),
+      v.literal("delivered"),
+      v.literal("failed"),
+      v.literal("opted_out")
+    ),
+    twilioSid: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_tenantId", ["tenantId"])
+    .index("by_campaignId", ["campaignId"])
+    .index("by_customerId_createdAt", ["customerId", "createdAt"]),
 });

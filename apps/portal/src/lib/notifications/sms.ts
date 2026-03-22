@@ -4,10 +4,16 @@ const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
 
-export async function sendSms(to: string, body: string): Promise<void> {
+export interface SmsResult {
+  success: boolean;
+  twilioSid?: string;
+  error?: string;
+}
+
+export async function sendSms(to: string, body: string): Promise<SmsResult> {
   if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_PHONE_NUMBER) {
     logger.warn('Twilio credentials not configured, skipping SMS send');
-    return;
+    return { success: false, error: 'Twilio credentials not configured' };
   }
 
   try {
@@ -30,10 +36,16 @@ export async function sendSms(to: string, body: string): Promise<void> {
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      logger.error({ err: error, to }, 'Failed to send SMS');
+      const errorText = await response.text();
+      logger.error({ err: errorText, to }, 'Failed to send SMS');
+      return { success: false, error: errorText };
     }
+
+    const data = await response.json();
+    return { success: true, twilioSid: data.sid };
   } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
     logger.error({ err, to }, 'Error sending SMS');
+    return { success: false, error: errorMessage };
   }
 }

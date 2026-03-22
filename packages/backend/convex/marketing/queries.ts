@@ -37,6 +37,7 @@ export const getCampaigns = query({
         name: c.name,
         subject: c.subject,
         segmentFilter: c.segmentFilter,
+        channel: c.channel ?? "email",
         status: c.status,
         scheduledAt: c.scheduledAt,
         sentAt: c.sentAt,
@@ -68,17 +69,20 @@ export const getCampaign = query({
       .withIndex("by_campaignId", (q) => q.eq("campaignId", args.campaignId))
       .collect();
 
-    const statusCounts = {
+    const statusCounts: Record<string, number> = {
       pending: 0,
       sent: 0,
       delivered: 0,
       opened: 0,
       clicked: 0,
       bounced: 0,
+      failed: 0,
     };
 
     for (const r of recipients) {
-      statusCounts[r.status]++;
+      if (statusCounts[r.status] !== undefined) {
+        statusCounts[r.status]++;
+      }
     }
 
     return {
@@ -160,5 +164,62 @@ export const getCampaignAnalytics = query({
         ? Math.round((effectiveClicked / effectiveOpened) * 10000) / 100
         : 0,
     };
+  },
+});
+
+// ==================== Internal queries for API routes ====================
+
+/**
+ * Get a campaign by ID without auth (for server-side API routes that already verified auth).
+ */
+export const getCampaignById = query({
+  args: {
+    campaignId: v.id("campaigns"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.campaignId);
+  },
+});
+
+/**
+ * Get all recipients for a campaign (for server-side processing).
+ */
+export const getCampaignRecipients = query({
+  args: {
+    campaignId: v.id("campaigns"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("campaignRecipients")
+      .withIndex("by_campaignId", (q) => q.eq("campaignId", args.campaignId))
+      .collect();
+  },
+});
+
+/**
+ * Get a customer by ID without auth (for server-side API routes).
+ */
+export const getCustomerById = query({
+  args: {
+    customerId: v.id("customers"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.customerId);
+  },
+});
+
+/**
+ * Find customers by phone number across all tenants.
+ * Used by the Twilio webhook to find who sent STOP.
+ */
+export const findCustomersByPhone = query({
+  args: {
+    phone: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Since we don't have a global phone index, we search across tenants
+    // This is acceptable for webhook processing (low frequency)
+    const allCustomers = await ctx.db.query("customers").collect();
+    return allCustomers.filter((c) => c.phone === args.phone);
   },
 });

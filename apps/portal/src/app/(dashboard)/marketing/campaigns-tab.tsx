@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@restaurantos/backend';
 import {
@@ -33,7 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from '@restaurantos/ui';
-import { Plus, Send, Eye, ArrowLeft, Mail } from 'lucide-react';
+import { Plus, Send, Eye, ArrowLeft, Mail, MessageSquare, Info } from 'lucide-react';
 import { toast } from 'sonner';
 
 // ────────────────────────────────────────────
@@ -41,13 +41,31 @@ import { toast } from 'sonner';
 // ────────────────────────────────────────────
 
 type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'cancelled';
+type CampaignChannel = 'email' | 'sms' | 'both';
 type Segment = 'all' | 'new' | 'regulars' | 'vip' | 'at_risk' | 'lost';
+
+interface CampaignAnalytics {
+  sent: number;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  bounced: number;
+}
+
+interface SmsAnalytics {
+  sent: number;
+  delivered: number;
+  failed: number;
+  optOuts: number;
+}
 
 interface Campaign {
   _id: string;
   name: string;
   subject: string;
   body?: string;
+  channel?: CampaignChannel;
+  smsBody?: string;
   segmentFilter: string;
   status: CampaignStatus;
   recipientCount: number;
@@ -55,15 +73,17 @@ interface Campaign {
   scheduledAt?: number;
   openCount?: number;
   clickCount?: number;
-  analytics?: {
-    sent: number;
-    delivered: number;
-    opened: number;
-    clicked: number;
-    bounced: number;
-  };
+  analytics?: CampaignAnalytics;
+  smsAnalytics?: SmsAnalytics;
   createdAt: number;
 }
+
+const SMS_MAX_LENGTH = 160;
+
+const SMS_MERGE_TAGS = [
+  { label: '{firstName}', value: '{firstName}' },
+  { label: '{restaurantName}', value: '{restaurantName}' },
+] as const;
 
 const SEGMENT_LABELS: Record<Segment, string> = {
   all: 'All Customers',
@@ -81,6 +101,47 @@ const STATUS_VARIANTS: Record<CampaignStatus, 'default' | 'secondary' | 'warning
   sent: 'success',
   cancelled: 'destructive',
 };
+
+const CHANNEL_LABELS: Record<CampaignChannel, string> = {
+  email: 'Email',
+  sms: 'SMS',
+  both: 'Both',
+};
+
+// ────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────
+
+function getChannelBadge(channel: CampaignChannel | undefined) {
+  if (!channel || channel === 'email') {
+    return (
+      <Badge variant="secondary" className="text-[10px] gap-1">
+        <Mail className="h-3 w-3" />
+        Email
+      </Badge>
+    );
+  }
+  if (channel === 'sms') {
+    return (
+      <Badge variant="secondary" className="text-[10px] gap-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+        <MessageSquare className="h-3 w-3" />
+        SMS
+      </Badge>
+    );
+  }
+  return (
+    <div className="flex gap-1">
+      <Badge variant="secondary" className="text-[10px] gap-1">
+        <Mail className="h-3 w-3" />
+        Email
+      </Badge>
+      <Badge variant="secondary" className="text-[10px] gap-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+        <MessageSquare className="h-3 w-3" />
+        SMS
+      </Badge>
+    </div>
+  );
+}
 
 // ────────────────────────────────────────────
 // Main Component
@@ -150,6 +211,7 @@ export function CampaignsTab({ tenantId }: CampaignsTabProps) {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
+                <TableHead className="hidden md:table-cell">Channel</TableHead>
                 <TableHead className="hidden md:table-cell">Status</TableHead>
                 <TableHead className="hidden sm:table-cell">Segment</TableHead>
                 <TableHead className="text-right">Recipients</TableHead>
@@ -160,7 +222,7 @@ export function CampaignsTab({ tenantId }: CampaignsTabProps) {
             <TableBody>
               {(!campaigns || campaigns.campaigns.length === 0) ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
                     No campaigns yet. Create your first campaign to get started.
                   </TableCell>
                 </TableRow>
@@ -186,9 +248,14 @@ export function CampaignsTab({ tenantId }: CampaignsTabProps) {
                         <div>
                           <p className="font-medium">{campaign.name}</p>
                           <p className="text-xs text-muted-foreground truncate max-w-[200px]">
-                            {campaign.subject}
+                            {campaign.channel === 'sms'
+                              ? (campaign.smsBody?.slice(0, 60) ?? '')
+                              : campaign.subject}
                           </p>
                         </div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {getChannelBadge(campaign.channel)}
                       </TableCell>
                       <TableCell className="hidden md:table-cell">
                         <Badge variant={STATUS_VARIANTS[campaign.status]} className="capitalize">
@@ -237,6 +304,178 @@ export function CampaignsTab({ tenantId }: CampaignsTabProps) {
 }
 
 // ────────────────────────────────────────────
+// SMS Compose Field
+// ────────────────────────────────────────────
+
+function SmsComposeField({
+  value,
+  onChange,
+  id,
+  label,
+  placeholder,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  id: string;
+  label: string;
+  placeholder?: string;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const charCount = value.length;
+  const isOverLimit = charCount > SMS_MAX_LENGTH;
+
+  const insertMergeTag = useCallback((tag: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      onChange(value + tag);
+      return;
+    }
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+    const newValue = before + tag + after;
+    onChange(newValue);
+
+    // Restore cursor after the inserted tag
+    requestAnimationFrame(() => {
+      const newPos = start + tag.length;
+      textarea.setSelectionRange(newPos, newPos);
+      textarea.focus();
+    });
+  }, [value, onChange]);
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="space-y-2">
+        {/* Merge tag buttons */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-muted-foreground mr-1">Insert:</span>
+          {SMS_MERGE_TAGS.map((tag) => (
+            <Button
+              key={tag.value}
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-xs font-mono"
+              onClick={() => insertMergeTag(tag.value)}
+            >
+              {tag.label}
+            </Button>
+          ))}
+        </div>
+
+        <textarea
+          ref={textareaRef}
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder ?? 'Type your SMS message...'}
+          rows={3}
+          maxLength={SMS_MAX_LENGTH + 20} // Allow slight overflow to show the counter warning
+          className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y"
+          aria-describedby={`${id}-counter`}
+        />
+
+        {/* Character counter */}
+        <div
+          id={`${id}-counter`}
+          className={`text-xs text-right ${isOverLimit ? 'text-destructive font-medium' : 'text-muted-foreground'}`}
+        >
+          {charCount}/{SMS_MAX_LENGTH} characters
+          {isOverLimit && ' — message will be split into multiple segments'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────
+// SMS Preview
+// ────────────────────────────────────────────
+
+function SmsPreview({ message }: { message: string }) {
+  const displayMessage = message
+    .replace(/\{firstName\}/g, 'John')
+    .replace(/\{restaurantName\}/g, 'Your Restaurant');
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        SMS Preview
+      </Label>
+      <div className="bg-muted/50 rounded-2xl p-4 max-w-[280px]">
+        <div className="bg-emerald-600 text-white rounded-2xl rounded-bl-sm px-3 py-2 text-sm">
+          {displayMessage || '(empty message)'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────
+// TCPA Compliance Notice
+// ────────────────────────────────────────────
+
+function TcpaNotice() {
+  return (
+    <div className="flex gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900 dark:bg-blue-950/30">
+      <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+      <p className="text-xs text-blue-700 dark:text-blue-300">
+        SMS will only be sent to customers who have given consent.
+        Customers can reply STOP to opt out.
+      </p>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────
+// Channel Selector
+// ────────────────────────────────────────────
+
+function ChannelSelector({
+  value,
+  onChange,
+}: {
+  value: CampaignChannel;
+  onChange: (channel: CampaignChannel) => void;
+}) {
+  const channels: CampaignChannel[] = ['email', 'sms', 'both'];
+
+  return (
+    <div className="space-y-2">
+      <Label>Channel</Label>
+      <div className="flex gap-2" role="radiogroup" aria-label="Campaign channel">
+        {channels.map((ch) => (
+          <Button
+            key={ch}
+            type="button"
+            variant={value === ch ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => onChange(ch)}
+            role="radio"
+            aria-checked={value === ch}
+            className="flex items-center gap-1.5"
+          >
+            {ch === 'email' && <Mail className="h-3.5 w-3.5" />}
+            {ch === 'sms' && <MessageSquare className="h-3.5 w-3.5" />}
+            {ch === 'both' && (
+              <>
+                <Mail className="h-3.5 w-3.5" />
+                <MessageSquare className="h-3.5 w-3.5" />
+              </>
+            )}
+            {CHANNEL_LABELS[ch]}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────
 // Campaign Dialog (New/Edit)
 // ────────────────────────────────────────────
 
@@ -256,8 +495,10 @@ function CampaignDialog({
   const sendCampaign = useMutation(api.marketing.mutations.sendCampaign);
 
   const [name, setName] = useState(campaign?.name ?? '');
+  const [channel, setChannel] = useState<CampaignChannel>(campaign?.channel ?? 'email');
   const [subject, setSubject] = useState(campaign?.subject ?? '');
   const [body, setBody] = useState(campaign?.body ?? '');
+  const [smsBody, setSmsBody] = useState(campaign?.smsBody ?? '');
   const [segment, setSegment] = useState<Segment>((campaign?.segmentFilter as Segment) ?? 'all');
   const [scheduleType, setScheduleType] = useState<'now' | 'later'>(
     campaign?.scheduledAt ? 'later' : 'now'
@@ -270,6 +511,9 @@ function CampaignDialog({
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
+  const showEmailFields = channel === 'email' || channel === 'both';
+  const showSmsFields = channel === 'sms' || channel === 'both';
+
   const recipientCount = segmentCounts?.[segment] ?? 0;
 
   async function handleSave() {
@@ -277,33 +521,44 @@ function CampaignDialog({
       toast.error('Campaign name is required');
       return;
     }
-    if (!subject.trim()) {
-      toast.error('Subject line is required');
+    if (showEmailFields && !subject.trim()) {
+      toast.error('Subject line is required for email campaigns');
       return;
     }
-    if (!body.trim()) {
-      toast.error('Email body is required');
+    if (showEmailFields && !body.trim()) {
+      toast.error('Email body is required for email campaigns');
+      return;
+    }
+    if (showSmsFields && !smsBody.trim()) {
+      toast.error('SMS message is required for SMS campaigns');
+      return;
+    }
+    if (showSmsFields && smsBody.length > SMS_MAX_LENGTH) {
+      toast.error(`SMS message exceeds ${SMS_MAX_LENGTH} character limit`);
       return;
     }
 
     setSaving(true);
     try {
+      const baseFields = {
+        name: name.trim(),
+        subject: showEmailFields ? subject.trim() : name.trim(), // Use name as fallback subject for SMS-only
+        body: showEmailFields ? body.trim() : '',
+        segmentFilter: segment,
+        channel,
+        smsBody: showSmsFields ? smsBody.trim() : undefined,
+      };
+
       if (campaign) {
         await updateCampaign({
           campaignId: campaign._id as any,
-          name: name.trim(),
-          subject: subject.trim(),
-          body: body.trim(),
-          segmentFilter: segment,
+          ...baseFields,
         });
         toast.success('Campaign updated');
       } else {
         await createCampaign({
           tenantId,
-          name: name.trim(),
-          subject: subject.trim(),
-          body: body.trim(),
-          segmentFilter: segment,
+          ...baseFields,
         });
         toast.success('Campaign created');
       }
@@ -329,26 +584,44 @@ function CampaignDialog({
     }
   }
 
+  const canPreview = (showEmailFields && body.trim()) || (showSmsFields && smsBody.trim());
+
   if (showPreview) {
     return (
       <Dialog open onOpenChange={(open) => { if (!open) setShowPreview(false); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Email Preview</DialogTitle>
-            <DialogDescription>Preview of your campaign email</DialogDescription>
+            <DialogTitle>Campaign Preview</DialogTitle>
+            <DialogDescription>
+              Preview of your {channel === 'both' ? 'email and SMS' : channel} campaign
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="rounded-lg border p-4 space-y-3">
-              <div className="text-sm">
-                <span className="text-muted-foreground">Subject: </span>
-                <span className="font-medium">{subject || '(no subject)'}</span>
+            {/* Email preview */}
+            {showEmailFields && body.trim() && (
+              <div>
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
+                  Email Preview
+                </Label>
+                <div className="rounded-lg border p-4 space-y-3">
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Subject: </span>
+                    <span className="font-medium">{subject || '(no subject)'}</span>
+                  </div>
+                  <Separator />
+                  <div
+                    className="prose prose-sm max-w-none text-sm"
+                    dangerouslySetInnerHTML={{ __html: body || '<p class="text-muted-foreground">(no content)</p>' }}
+                  />
+                </div>
               </div>
-              <Separator />
-              <div
-                className="prose prose-sm max-w-none text-sm"
-                dangerouslySetInnerHTML={{ __html: body || '<p class="text-muted-foreground">(no content)</p>' }}
-              />
-            </div>
+            )}
+
+            {/* SMS preview */}
+            {showSmsFields && smsBody.trim() && (
+              <SmsPreview message={smsBody} />
+            )}
+
             <div className="text-xs text-muted-foreground text-center">
               Sending to {recipientCount} recipient{recipientCount !== 1 ? 's' : ''} in &quot;{SEGMENT_LABELS[segment]}&quot;
             </div>
@@ -369,7 +642,7 @@ function CampaignDialog({
         <DialogHeader>
           <DialogTitle>{campaign ? 'Edit Campaign' : 'New Campaign'}</DialogTitle>
           <DialogDescription>
-            {campaign ? 'Update your campaign details.' : 'Create a new email campaign for your customers.'}
+            {campaign ? 'Update your campaign details.' : 'Create a new campaign for your customers.'}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
@@ -385,16 +658,54 @@ function CampaignDialog({
             />
           </div>
 
-          {/* Subject Line */}
-          <div className="space-y-2">
-            <Label htmlFor="campaign-subject">Subject Line *</Label>
-            <Input
-              id="campaign-subject"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="e.g., Your exclusive 20% off is here!"
-            />
-          </div>
+          {/* Channel Selector */}
+          <ChannelSelector value={channel} onChange={setChannel} />
+
+          {/* TCPA compliance notice for SMS */}
+          {showSmsFields && <TcpaNotice />}
+
+          {/* Email Fields */}
+          {showEmailFields && (
+            <>
+              {/* Subject Line */}
+              <div className="space-y-2">
+                <Label htmlFor="campaign-subject">Subject Line *</Label>
+                <Input
+                  id="campaign-subject"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="e.g., Your exclusive 20% off is here!"
+                />
+              </div>
+
+              {/* Email Body */}
+              <div className="space-y-2">
+                <Label htmlFor="campaign-body">Email Body *</Label>
+                <textarea
+                  id="campaign-body"
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder="Write your email content here. HTML is supported."
+                  rows={8}
+                  className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y"
+                />
+              </div>
+            </>
+          )}
+
+          {/* SMS Fields */}
+          {showSmsFields && (
+            <>
+              <SmsComposeField
+                id="campaign-sms-body"
+                label="SMS Message *"
+                value={smsBody}
+                onChange={setSmsBody}
+                placeholder="e.g., Hi {firstName}, enjoy 20% off your next order at {restaurantName}! Show this text to redeem."
+              />
+              <SmsPreview message={smsBody} />
+            </>
+          )}
 
           {/* Target Segment */}
           <div className="space-y-2">
@@ -416,22 +727,21 @@ function CampaignDialog({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              {recipientCount} recipient{recipientCount !== 1 ? 's' : ''} will receive this campaign
-            </p>
-          </div>
-
-          {/* Email Body */}
-          <div className="space-y-2">
-            <Label htmlFor="campaign-body">Email Body *</Label>
-            <textarea
-              id="campaign-body"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="Write your email content here. HTML is supported."
-              rows={8}
-              className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y"
-            />
+            {/* Audience count with channel-aware messaging */}
+            <div className="text-xs text-muted-foreground space-y-0.5">
+              {channel === 'email' && (
+                <p>{recipientCount} customer{recipientCount !== 1 ? 's' : ''} with email in this segment</p>
+              )}
+              {channel === 'sms' && (
+                <p>{recipientCount} customer{recipientCount !== 1 ? 's' : ''} in this segment (SMS sent only to those with phone + consent)</p>
+              )}
+              {channel === 'both' && (
+                <>
+                  <p>{recipientCount} customer{recipientCount !== 1 ? 's' : ''} in this segment</p>
+                  <p className="text-muted-foreground/70">Email: customers with email address. SMS: customers with phone + consent.</p>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Schedule */}
@@ -471,7 +781,7 @@ function CampaignDialog({
             type="button"
             variant="outline"
             onClick={() => setShowPreview(true)}
-            disabled={!body.trim()}
+            disabled={!canPreview}
           >
             <Eye className="h-4 w-4 mr-2" />
             Preview
@@ -485,7 +795,7 @@ function CampaignDialog({
                 type="button"
                 variant="default"
                 onClick={handleSendNow}
-                disabled={saving || !name.trim() || !subject.trim() || !body.trim()}
+                disabled={saving || !name.trim() || (showEmailFields && (!subject.trim() || !body.trim())) || (showSmsFields && !smsBody.trim())}
               >
                 <Send className="h-4 w-4 mr-2" />
                 {saving ? 'Sending...' : 'Send Now'}
@@ -516,7 +826,11 @@ function CampaignDetail({
   campaign: Campaign;
   onBack: () => void;
 }) {
-  const analytics = campaign.analytics ?? {
+  const effectiveChannel: CampaignChannel = campaign.channel ?? 'email';
+  const showEmailAnalytics = effectiveChannel === 'email' || effectiveChannel === 'both';
+  const showSmsAnalytics = effectiveChannel === 'sms' || effectiveChannel === 'both';
+
+  const emailAnalytics = campaign.analytics ?? {
     sent: 0,
     delivered: 0,
     opened: 0,
@@ -524,25 +838,48 @@ function CampaignDetail({
     bounced: 0,
   };
 
-  const deliveryRate = analytics.sent > 0
-    ? Math.round((analytics.delivered / analytics.sent) * 100)
+  const smsAnalytics = campaign.smsAnalytics ?? {
+    sent: 0,
+    delivered: 0,
+    failed: 0,
+    optOuts: 0,
+  };
+
+  // Email rates
+  const deliveryRate = emailAnalytics.sent > 0
+    ? Math.round((emailAnalytics.delivered / emailAnalytics.sent) * 100)
     : 0;
-  const openRate = analytics.delivered > 0
-    ? Math.round((analytics.opened / analytics.delivered) * 100)
+  const openRate = emailAnalytics.delivered > 0
+    ? Math.round((emailAnalytics.opened / emailAnalytics.delivered) * 100)
     : 0;
-  const clickRate = analytics.delivered > 0
-    ? Math.round((analytics.clicked / analytics.delivered) * 100)
+  const clickRate = emailAnalytics.delivered > 0
+    ? Math.round((emailAnalytics.clicked / emailAnalytics.delivered) * 100)
     : 0;
-  const bounceRate = analytics.sent > 0
-    ? Math.round((analytics.bounced / analytics.sent) * 100)
+  const bounceRate = emailAnalytics.sent > 0
+    ? Math.round((emailAnalytics.bounced / emailAnalytics.sent) * 100)
     : 0;
 
-  const stats = [
-    { label: 'Sent', value: analytics.sent, color: 'text-foreground' },
-    { label: 'Delivered', value: analytics.delivered, subtitle: `${deliveryRate}%`, color: 'text-blue-600' },
-    { label: 'Opened', value: analytics.opened, subtitle: `${openRate}%`, color: 'text-green-600' },
-    { label: 'Clicked', value: analytics.clicked, subtitle: `${clickRate}%`, color: 'text-purple-600' },
-    { label: 'Bounced', value: analytics.bounced, subtitle: `${bounceRate}%`, color: 'text-red-600' },
+  // SMS rates
+  const smsDeliveryRate = smsAnalytics.sent > 0
+    ? Math.round((smsAnalytics.delivered / smsAnalytics.sent) * 100)
+    : 0;
+  const smsFailRate = smsAnalytics.sent > 0
+    ? Math.round((smsAnalytics.failed / smsAnalytics.sent) * 100)
+    : 0;
+
+  const emailStats = [
+    { label: 'Sent', value: emailAnalytics.sent, color: 'text-foreground' },
+    { label: 'Delivered', value: emailAnalytics.delivered, subtitle: `${deliveryRate}%`, color: 'text-blue-600' },
+    { label: 'Opened', value: emailAnalytics.opened, subtitle: `${openRate}%`, color: 'text-green-600' },
+    { label: 'Clicked', value: emailAnalytics.clicked, subtitle: `${clickRate}%`, color: 'text-purple-600' },
+    { label: 'Bounced', value: emailAnalytics.bounced, subtitle: `${bounceRate}%`, color: 'text-red-600' },
+  ];
+
+  const smsStats = [
+    { label: 'Sent', value: smsAnalytics.sent, color: 'text-foreground' },
+    { label: 'Delivered', value: smsAnalytics.delivered, subtitle: `${smsDeliveryRate}%`, color: 'text-emerald-600' },
+    { label: 'Failed', value: smsAnalytics.failed, subtitle: `${smsFailRate}%`, color: 'text-red-600' },
+    { label: 'Opt-outs', value: smsAnalytics.optOuts, color: 'text-amber-600' },
   ];
 
   return (
@@ -554,33 +891,77 @@ function CampaignDetail({
         </Button>
         <div>
           <h2 className="text-lg font-semibold">{campaign.name}</h2>
-          <p className="text-sm text-muted-foreground">{campaign.subject}</p>
+          <p className="text-sm text-muted-foreground">
+            {effectiveChannel !== 'sms' ? campaign.subject : (campaign.smsBody?.slice(0, 80) ?? '')}
+          </p>
         </div>
-        <Badge variant={STATUS_VARIANTS[campaign.status]} className="capitalize ml-auto">
-          {campaign.status}
-        </Badge>
+        <div className="ml-auto flex items-center gap-2">
+          {getChannelBadge(effectiveChannel)}
+          <Badge variant={STATUS_VARIANTS[campaign.status]} className="capitalize">
+            {campaign.status}
+          </Badge>
+        </div>
       </div>
 
-      {/* Analytics Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        {stats.map(({ label, value, subtitle, color }) => (
-          <Card key={label}>
-            <CardContent className="pt-4 pb-4">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
-              <p className={`text-2xl font-bold ${color}`}>{value.toLocaleString()}</p>
-              {subtitle && (
-                <p className="text-xs text-muted-foreground">{subtitle} rate</p>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {/* Email Analytics */}
+      {showEmailAnalytics && (
+        <div className="space-y-2">
+          {effectiveChannel === 'both' && (
+            <h3 className="text-sm font-medium flex items-center gap-1.5">
+              <Mail className="h-4 w-4" />
+              Email Metrics
+            </h3>
+          )}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            {emailStats.map(({ label, value, subtitle, color }) => (
+              <Card key={label}>
+                <CardContent className="pt-4 pb-4">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
+                  <p className={`text-2xl font-bold ${color}`}>{value.toLocaleString()}</p>
+                  {subtitle && (
+                    <p className="text-xs text-muted-foreground">{subtitle} rate</p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* SMS Analytics */}
+      {showSmsAnalytics && (
+        <div className="space-y-2">
+          {effectiveChannel === 'both' && (
+            <h3 className="text-sm font-medium flex items-center gap-1.5">
+              <MessageSquare className="h-4 w-4" />
+              SMS Metrics
+            </h3>
+          )}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {smsStats.map(({ label, value, subtitle, color }) => (
+              <Card key={`sms-${label}`}>
+                <CardContent className="pt-4 pb-4">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
+                  <p className={`text-2xl font-bold ${color}`}>{value.toLocaleString()}</p>
+                  {subtitle && (
+                    <p className="text-xs text-muted-foreground">{subtitle} rate</p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Campaign Info */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Mail className="h-4 w-4" />
+            {effectiveChannel === 'sms' ? (
+              <MessageSquare className="h-4 w-4" />
+            ) : (
+              <Mail className="h-4 w-4" />
+            )}
             Campaign Details
           </CardTitle>
         </CardHeader>
@@ -593,6 +974,10 @@ function CampaignDetail({
             <div>
               <p className="text-muted-foreground">Recipients</p>
               <p className="font-medium">{campaign.recipientCount.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Channel</p>
+              <p className="font-medium capitalize">{effectiveChannel}</p>
             </div>
             <div>
               <p className="text-muted-foreground">Sent Date</p>
@@ -619,14 +1004,33 @@ function CampaignDetail({
               </p>
             </div>
           </div>
-          <Separator />
-          <div>
-            <p className="text-sm text-muted-foreground mb-2">Email Body</p>
-            <div
-              className="rounded-lg border p-4 prose prose-sm max-w-none text-sm bg-muted/30"
-              dangerouslySetInnerHTML={{ __html: campaign.body ?? '' }}
-            />
-          </div>
+
+          {/* Email body */}
+          {showEmailAnalytics && campaign.body && (
+            <>
+              <Separator />
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Email Body</p>
+                <div
+                  className="rounded-lg border p-4 prose prose-sm max-w-none text-sm bg-muted/30"
+                  dangerouslySetInnerHTML={{ __html: campaign.body }}
+                />
+              </div>
+            </>
+          )}
+
+          {/* SMS body */}
+          {showSmsAnalytics && campaign.smsBody && (
+            <>
+              <Separator />
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">SMS Message</p>
+                <div className="rounded-lg border p-4 text-sm bg-muted/30">
+                  {campaign.smsBody}
+                </div>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

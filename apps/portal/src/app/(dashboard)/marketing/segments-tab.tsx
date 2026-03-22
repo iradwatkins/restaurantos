@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '@restaurantos/backend';
 import {
@@ -19,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from '@restaurantos/ui';
-import { ArrowLeft, Users } from 'lucide-react';
+import { ArrowLeft, Users, Mail, Phone, MessageSquare } from 'lucide-react';
 import { formatCents } from '@/lib/format';
 import Link from 'next/link';
 
@@ -37,10 +37,14 @@ interface SegmentCustomer {
   name: string;
   email?: string | null;
   phone?: string | null;
+  smsConsent?: boolean;
+  smsOptedOut?: boolean;
   orderCount: number;
   totalSpent: number;
   lastOrderDate?: number | null;
 }
+
+type SmsStatus = 'consented' | 'no-consent' | 'no-phone';
 
 const SEGMENT_DESCRIPTIONS: Record<string, string> = {
   new: 'Customers who placed their first order within the last 30 days',
@@ -49,6 +53,42 @@ const SEGMENT_DESCRIPTIONS: Record<string, string> = {
   at_risk: 'Customers inactive for 60+ days',
   lost: 'Customers inactive for 90+ days',
 };
+
+// ────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────
+
+function getSmsStatus(customer: SegmentCustomer): SmsStatus {
+  if (!customer.phone) return 'no-phone';
+  if (customer.smsConsent && !customer.smsOptedOut) return 'consented';
+  return 'no-consent';
+}
+
+function SmsConsentIcon({ status }: { status: SmsStatus }) {
+  if (status === 'no-phone') {
+    return null;
+  }
+  if (status === 'consented') {
+    return (
+      <span
+        className="inline-flex items-center"
+        title="SMS consent given"
+        aria-label="SMS consent given"
+      >
+        <Phone className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex items-center"
+      title="Has phone, no SMS consent"
+      aria-label="Has phone, no SMS consent"
+    >
+      <Phone className="h-3.5 w-3.5 text-muted-foreground/40" />
+    </span>
+  );
+}
 
 // ────────────────────────────────────────────
 // Main Component
@@ -139,7 +179,20 @@ function SegmentCustomerList({
     api.customers.queries.getCustomersBySegment,
     { tenantId, segment: segmentKey }
   );
-  const customers = customersResult?.customers;
+  const customers = customersResult?.customers as SegmentCustomer[] | undefined;
+
+  // Compute reachability counts
+  const { emailReachable, smsReachable } = useMemo(() => {
+    if (!customers) return { emailReachable: 0, smsReachable: 0 };
+
+    let email = 0;
+    let sms = 0;
+    for (const c of customers) {
+      if (c.email) email++;
+      if (c.phone && c.smsConsent && !c.smsOptedOut) sms++;
+    }
+    return { emailReachable: email, smsReachable: sms };
+  }, [customers]);
 
   return (
     <div className="space-y-4">
@@ -159,6 +212,20 @@ function SegmentCustomerList({
         </Badge>
       </div>
 
+      {/* Reachability summary */}
+      {customers && customers.length > 0 && (
+        <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Mail className="h-3.5 w-3.5" />
+            <span>{emailReachable} reachable by email</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <MessageSquare className="h-3.5 w-3.5" />
+            <span>{smsReachable} reachable by SMS</span>
+          </div>
+        </div>
+      )}
+
       <Card>
         <CardContent className="pt-0 px-0">
           <Table>
@@ -167,6 +234,10 @@ function SegmentCustomerList({
                 <TableHead>Name</TableHead>
                 <TableHead className="hidden md:table-cell">Email</TableHead>
                 <TableHead className="hidden sm:table-cell">Phone</TableHead>
+                <TableHead className="w-[60px] text-center hidden sm:table-cell">
+                  <span className="sr-only">SMS Consent</span>
+                  <MessageSquare className="h-3.5 w-3.5 mx-auto text-muted-foreground" />
+                </TableHead>
                 <TableHead className="text-right">Orders</TableHead>
                 <TableHead className="text-right">Total Spent</TableHead>
                 <TableHead className="text-right hidden lg:table-cell">Last Order</TableHead>
@@ -175,42 +246,49 @@ function SegmentCustomerList({
             <TableBody>
               {(!customers || customers.length === 0) ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
                     No customers in this segment
                   </TableCell>
                 </TableRow>
               ) : (
-                customers.map((customer: SegmentCustomer) => (
-                  <TableRow key={customer._id}>
-                    <TableCell>
-                      <Link
-                        href={`/customers/${customer._id}`}
-                        className="font-medium text-primary hover:underline"
-                      >
-                        {customer.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">
-                      {customer.email ?? '-'}
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell text-muted-foreground">
-                      {customer.phone ?? '-'}
-                    </TableCell>
-                    <TableCell className="text-right">{customer.orderCount}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      ${formatCents(customer.totalSpent)}
-                    </TableCell>
-                    <TableCell className="text-right hidden lg:table-cell text-muted-foreground text-sm">
-                      {customer.lastOrderDate
-                        ? new Date(customer.lastOrderDate).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                          })
-                        : '-'}
-                    </TableCell>
-                  </TableRow>
-                ))
+                customers.map((customer: SegmentCustomer) => {
+                  const smsStatus = getSmsStatus(customer);
+
+                  return (
+                    <TableRow key={customer._id}>
+                      <TableCell>
+                        <Link
+                          href={`/customers/${customer._id}`}
+                          className="font-medium text-primary hover:underline"
+                        >
+                          {customer.name}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-muted-foreground">
+                        {customer.email ?? '-'}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell text-muted-foreground">
+                        {customer.phone ?? '-'}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell text-center">
+                        <SmsConsentIcon status={smsStatus} />
+                      </TableCell>
+                      <TableCell className="text-right">{customer.orderCount}</TableCell>
+                      <TableCell className="text-right font-medium">
+                        ${formatCents(customer.totalSpent)}
+                      </TableCell>
+                      <TableCell className="text-right hidden lg:table-cell text-muted-foreground text-sm">
+                        {customer.lastOrderDate
+                          ? new Date(customer.lastOrderDate).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })
+                          : '-'}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

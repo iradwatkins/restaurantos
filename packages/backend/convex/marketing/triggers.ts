@@ -11,17 +11,30 @@ const triggerTypeValidator = v.union(
   v.literal("first_order_followup")
 );
 
+const channelValidator = v.optional(
+  v.union(v.literal("email"), v.literal("sms"), v.literal("both"))
+);
+
 export const createTrigger = mutation({
   args: {
     tenantId: v.id("tenants"),
     type: triggerTypeValidator,
     templateSubject: v.string(),
     templateBody: v.string(),
+    channel: channelValidator,
+    smsTemplate: v.optional(v.string()),
     isActive: v.boolean(),
   },
   handler: async (ctx, args) => {
     const user = await requireTenantAccess(ctx);
     if (user.tenantId !== args.tenantId) throw new Error("Forbidden");
+
+    const channel = args.channel ?? "email";
+
+    // Validate: SMS triggers require smsTemplate
+    if ((channel === "sms" || channel === "both") && !args.smsTemplate) {
+      throw new Error("smsTemplate is required for SMS or multi-channel triggers");
+    }
 
     // Prevent duplicate trigger types per tenant
     const existing = await ctx.db
@@ -39,6 +52,8 @@ export const createTrigger = mutation({
       type: args.type,
       templateSubject: args.templateSubject,
       templateBody: args.templateBody,
+      channel,
+      smsTemplate: args.smsTemplate,
       isActive: args.isActive,
       createdAt: Date.now(),
     });
@@ -52,6 +67,8 @@ export const updateTrigger = mutation({
     triggerId: v.id("automatedTriggers"),
     templateSubject: v.optional(v.string()),
     templateBody: v.optional(v.string()),
+    channel: channelValidator,
+    smsTemplate: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireTenantAccess(ctx);
@@ -60,9 +77,11 @@ export const updateTrigger = mutation({
     if (!trigger) throw new Error("Trigger not found");
     if (trigger.tenantId !== user.tenantId) throw new Error("Forbidden");
 
-    const updates: Record<string, string> = {};
+    const updates: Record<string, string | undefined> = {};
     if (args.templateSubject !== undefined) updates.templateSubject = args.templateSubject;
     if (args.templateBody !== undefined) updates.templateBody = args.templateBody;
+    if (args.channel !== undefined) updates.channel = args.channel;
+    if (args.smsTemplate !== undefined) updates.smsTemplate = args.smsTemplate;
 
     await ctx.db.patch(args.triggerId, updates);
     return args.triggerId;
@@ -126,7 +145,7 @@ type TriggerType = Doc<"automatedTriggers">["type"];
 
 /**
  * Evaluate which customers match active triggers.
- * Returns trigger-customer pairs that should receive emails.
+ * Returns trigger-customer pairs that should receive emails/SMS.
  */
 export const evaluateTriggers = query({
   args: {
@@ -155,24 +174,41 @@ export const evaluateTriggers = query({
     const results: Array<{
       triggerId: string;
       triggerType: TriggerType;
+      channel: "email" | "sms" | "both";
       templateSubject: string;
       templateBody: string;
+      smsTemplate: string | undefined;
       customers: Array<{
         customerId: string;
         name: string;
         email: string;
+        phone: string | undefined;
+        smsEligible: boolean;
       }>;
     }> = [];
 
     for (const trigger of activeTriggers) {
+      const triggerChannel = trigger.channel ?? "email";
       const matchingCustomers: Array<{
         customerId: string;
         name: string;
         email: string;
+        phone: string | undefined;
+        smsEligible: boolean;
       }> = [];
 
       for (const customer of allCustomers) {
-        if (!customer.email) continue;
+        // Must have email for email channel, or phone+consent for SMS
+        const hasEmail = !!customer.email;
+        const hasSmsEligibility =
+          !!customer.phone &&
+          customer.smsConsent === true &&
+          customer.smsOptedOut !== true;
+
+        // Skip if customer can't receive via any of the trigger's channels
+        if (triggerChannel === "email" && !hasEmail) continue;
+        if (triggerChannel === "sms" && !hasSmsEligibility) continue;
+        if (triggerChannel === "both" && !hasEmail && !hasSmsEligibility) continue;
 
         const daysSinceLastOrder = customer.lastOrderDate
           ? now - customer.lastOrderDate
@@ -221,7 +257,9 @@ export const evaluateTriggers = query({
           matchingCustomers.push({
             customerId: customer._id,
             name: customer.name,
-            email: customer.email,
+            email: customer.email ?? "",
+            phone: customer.phone,
+            smsEligible: hasSmsEligibility,
           });
         }
       }
@@ -230,8 +268,10 @@ export const evaluateTriggers = query({
         results.push({
           triggerId: trigger._id,
           triggerType: trigger.type,
+          channel: triggerChannel as "email" | "sms" | "both",
           templateSubject: trigger.templateSubject,
           templateBody: trigger.templateBody,
+          smsTemplate: trigger.smsTemplate,
           customers: matchingCustomers,
         });
       }
