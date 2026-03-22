@@ -461,7 +461,6 @@ export default function OrdersPage() {
     setGiftCardError(null);
     setShowGiftCardPayment(false);
     setGiftCardAppliedAmount(0);
-    setGiftCardRemainingMethod(null);
   }
 
   function formatGiftCardCode(value: string): string {
