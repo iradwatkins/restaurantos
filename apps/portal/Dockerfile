@@ -2,7 +2,7 @@ FROM node:20-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 COPY . .
-ARG NEXT_PUBLIC_CONVEX_URL=http://72.60.28.175:3214
+ARG NEXT_PUBLIC_CONVEX_URL=https://convex.restaurants.irawatkins.com
 ENV NEXT_PUBLIC_CONVEX_URL=$NEXT_PUBLIC_CONVEX_URL
 RUN pnpm install --frozen-lockfile
 RUN pnpm turbo build --filter=@restaurantos/portal
