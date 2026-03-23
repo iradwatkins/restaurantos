@@ -23,12 +23,12 @@
     "@lhci/cli": "^0.15.1",
     "@playwright/test": "^1.58.2",
     "@types/jest-axe": "^3.5.9",
-    "@vitest/coverage-v8": "^4.0.18",
+    "@vitest/coverage-v8": "^4.1.1",
     "jest-axe": "^10.0.0",
     "prettier": "^3.5.3",
-    "turbo": "^2.0.0",
+    "turbo": "^2.8.20",
     "typescript": "^5.7.0",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.1"
   },
   "dependencies": {
     "stripe": "^20.4.1"
